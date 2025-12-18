@@ -4,10 +4,11 @@ Fine-tuning de [FunctionGemma-270m-it](https://huggingface.co/google/functiongem
 
 ## Prérequis
 
-- Python 3.10+
-- GPU NVIDIA avec CUDA (RTX 3090/4090 recommandé)
-- Home Assistant avec l'intégration MCP activée
+- Python 3.11+
+- Home Assistant avec un token d'accès longue durée
 - Compte Hugging Face avec accès à FunctionGemma (modèle gated)
+- **Pour l'entraînement local**: GPU NVIDIA avec CUDA (RTX 3090/4090 recommandé)
+- **Pour l'entraînement cloud**: Compte Google Colab (gratuit ou Pro)
 
 ## Installation
 
@@ -50,9 +51,24 @@ Génère des paires (requête utilisateur → appel de fonction) en français.
 
 ### Étape 3: Lancer l'entraînement
 
+#### Option A: Entraînement local (GPU requis)
+
 ```bash
 python scripts/train_model.py
 ```
+
+#### Option B: Entraînement sur Google Colab (recommandé)
+
+1. Ouvrir [Google Colab](https://colab.google.com)
+2. File → Upload notebook → `notebooks/train_colab.ipynb`
+3. Runtime → Change runtime type → **T4 GPU**
+4. Configurer le token HuggingFace dans Colab Secrets (`HF_TOKEN`)
+5. Exécuter les cellules et uploader `data/train.jsonl` + `data/val.jsonl`
+
+| Option | GPU | Temps estimé | Coût |
+|--------|-----|--------------|------|
+| Colab gratuit | T4 | 1-2h | Gratuit |
+| Colab Pro | A100 | 30-45min | ~$12/mois |
 
 Le modèle fine-tuné sera sauvegardé dans `output/final/`.
 
@@ -84,11 +100,11 @@ gemma-ha/
 ├── requirements.txt     # Dépendances
 ├── .env                 # Tokens (non versionné)
 ├── data/                # Données générées
-│   ├── function_schemas.json
-│   ├── entities.json
-│   ├── train.jsonl
-│   └── val.jsonl
+│   ├── train.jsonl      # Dataset d'entraînement
+│   └── val.jsonl        # Dataset de validation
 ├── output/              # Modèle fine-tuné
+├── notebooks/
+│   └── train_colab.ipynb  # Notebook pour Google Colab
 ├── src/
 │   ├── ha_client.py     # Client Home Assistant
 │   ├── dataset_generator.py

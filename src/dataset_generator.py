@@ -261,10 +261,13 @@ class TrainingExample:
     function_call: dict
     entities_context: list[str] = field(default_factory=list)
 
-    def to_functiongemma_format(self, function_schemas: list[dict]) -> dict:
+    def to_functiongemma_format(self) -> dict:
         """
-        Convertit en format FunctionGemma.
-        Format: messages avec developer (system), user, et assistant (function call)
+        Convertit en format FunctionGemma simplifié.
+        Format: text avec instruction, requête et réponse.
+
+        Note: On n'inclut PAS les schémas tools car ils polluent l'entraînement
+        (trop de tokens de schéma vs. tokens d'exemple).
         """
         # Format de sortie FunctionGemma
         # <start_function_call>call:function_name{param:<escape>value<escape>}<end_function_call>
@@ -285,23 +288,16 @@ class TrainingExample:
         func_name = self.function_call["name"]
         assistant_response = f"<start_function_call>call:{func_name}{{{params_str}}}<end_function_call>"
 
-        return {
-            "messages": [
-                {
-                    "role": "developer",
-                    "content": "Tu es un assistant qui contrôle une maison intelligente avec Home Assistant. Tu dois appeler les fonctions appropriées pour répondre aux demandes de l'utilisateur."
-                },
-                {
-                    "role": "user",
-                    "content": self.user_query
-                },
-                {
-                    "role": "assistant",
-                    "content": assistant_response
-                }
-            ],
-            "tools": function_schemas
-        }
+        # Format simplifié: juste le texte d'entraînement
+        text = (
+            f"<start_of_turn>user\n"
+            f"Tu contrôles une maison intelligente. Appelle la fonction appropriée.\n"
+            f"Commande: {self.user_query}<end_of_turn>\n"
+            f"<start_of_turn>model\n"
+            f"{assistant_response}<end_of_turn>"
+        )
+
+        return {"text": text}
 
 
 class DatasetGenerator:
@@ -701,22 +697,14 @@ class DatasetGenerator:
         train_path = os.path.join(output_dir, "train.jsonl")
         val_path = os.path.join(output_dir, "val.jsonl")
 
-        # Filtrer les schémas pertinents pour chaque exemple
-        relevant_schemas = [s for s in self.function_schemas if any(
-            s.get("function", {}).get("name", "").split(".")[0] in domain
-            for domain in ["light", "switch", "climate", "cover", "lock",
-                          "alarm_control_panel", "media_player", "fan",
-                          "scene", "script", "automation"]
-        )]
-
         with open(train_path, "w", encoding="utf-8") as f:
             for example in train_examples:
-                data = example.to_functiongemma_format(relevant_schemas)
+                data = example.to_functiongemma_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
         with open(val_path, "w", encoding="utf-8") as f:
             for example in val_examples:
-                data = example.to_functiongemma_format(relevant_schemas)
+                data = example.to_functiongemma_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
         print(f"Dataset sauvegardé:")
