@@ -223,7 +223,12 @@ class GemmaHAChat:
         t1 = time.perf_counter()
         prompt = (
             f"<start_of_turn>system\n"
-            f"Entités disponibles:\n{entities_context}<end_of_turn>\n"
+            f"Tu contrôles Home Assistant. Utilise le bon domaine pour chaque entité:\n"
+            f"- light.* -> light.turn_on/light.turn_off\n"
+            f"- switch.* -> switch.turn_on/switch.turn_off\n"
+            f"- climate.* -> climate.set_temperature\n"
+            f"- scene.* -> scene.turn_on\n"
+            f"\nEntités:\n{entities_context}<end_of_turn>\n"
             f"<start_of_turn>user\n{query}<end_of_turn>\n"
             f"<start_of_turn>model\n"
         )
