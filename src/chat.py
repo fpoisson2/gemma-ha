@@ -134,7 +134,27 @@ class GemmaHAChat:
                     value = int(value)
                 params[key.strip()] = value
 
+        # Corriger le domaine du service basé sur l'entity_id
+        func_name = self._fix_service_domain(func_name, params)
+
         return func_name, params
+
+    def _fix_service_domain(self, func_name: str, params: dict) -> str:
+        """Corrige le domaine du service pour correspondre à l'entity_id."""
+        entity_id = params.get("entity_id", "")
+        if not entity_id or "." not in func_name:
+            return func_name
+
+        entity_domain = entity_id.split(".")[0]
+        service_domain, service = func_name.split(".", 1)
+
+        # Si le domaine du service ne correspond pas à l'entité, corriger
+        if service_domain != entity_domain:
+            # Mapping des services compatibles
+            if service in ("turn_on", "turn_off", "toggle"):
+                return f"{entity_domain}.{service}"
+
+        return func_name
 
     def generate(self, prompt: str, max_new_tokens: int = 100) -> str:
         """Génère une réponse avec llama.cpp."""
