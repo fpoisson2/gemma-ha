@@ -46,8 +46,8 @@ training:
 
 # Dataset
 dataset:
-  # Nombre d'exemples à générer par fonction
-  examples_per_function: 50
+  # Nombre d'exemples à générer par action/entité
+  examples_per_function: 100
   # Langues
   languages:
     - "fr"

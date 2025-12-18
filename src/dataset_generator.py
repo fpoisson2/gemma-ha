@@ -262,13 +262,14 @@ class DatasetGenerator:
         available_entity_ids = self._get_entity_ids(domain)
 
         for action, action_templates in templates.items():
+            # Pour chaque entité, générer plusieurs exemples avec différents templates
             for entity in domain_entities[:self.examples_per_action]:
                 entity_id = entity["entity_id"]
                 entity_name = self._get_entity_name(entity)
-                location = random.choice(LOCATIONS_FR)
 
-                # Sélectionner un template aléatoire
-                template = random.choice(action_templates)
+                # Utiliser TOUS les templates pour chaque entité (plus de variété)
+                for template in action_templates:
+                    location = random.choice(LOCATIONS_FR)
 
                 # Générer la requête utilisateur
                 action_params = {}
