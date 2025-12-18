@@ -17,6 +17,79 @@ import yaml
 from tqdm import tqdm
 
 
+# Variations de texte pour robustesse aux fautes de frappe
+def add_typos(text: str, probability: float = 0.3) -> str:
+    """Ajoute des fautes de frappe réalistes au texte."""
+    if random.random() > probability:
+        return text
+
+    typo_type = random.choice([
+        "missing_accent",
+        "missing_letter",
+        "double_letter",
+        "swap_letters",
+        "wrong_accent",
+        "missing_space",
+        "lowercase",
+    ])
+
+    if typo_type == "missing_accent":
+        # Supprimer les accents
+        replacements = [
+            ("é", "e"), ("è", "e"), ("ê", "e"), ("ë", "e"),
+            ("à", "a"), ("â", "a"),
+            ("ù", "u"), ("û", "u"),
+            ("î", "i"), ("ï", "i"),
+            ("ô", "o"), ("ö", "o"),
+            ("ç", "c"),
+        ]
+        for old, new in replacements:
+            if old in text and random.random() < 0.5:
+                text = text.replace(old, new, 1)
+                break
+
+    elif typo_type == "missing_letter" and len(text) > 5:
+        # Supprimer une lettre aléatoire
+        idx = random.randint(1, len(text) - 2)
+        text = text[:idx] + text[idx+1:]
+
+    elif typo_type == "double_letter" and len(text) > 3:
+        # Doubler une lettre
+        idx = random.randint(1, len(text) - 2)
+        if text[idx].isalpha():
+            text = text[:idx] + text[idx] + text[idx:]
+
+    elif typo_type == "swap_letters" and len(text) > 3:
+        # Échanger deux lettres adjacentes
+        idx = random.randint(1, len(text) - 3)
+        text = text[:idx] + text[idx+1] + text[idx] + text[idx+2:]
+
+    elif typo_type == "wrong_accent":
+        # Mauvais accent
+        replacements = [
+            ("é", "è"), ("è", "é"),
+            ("à", "a"), ("â", "à"),
+        ]
+        for old, new in replacements:
+            if old in text and random.random() < 0.5:
+                text = text.replace(old, new, 1)
+                break
+
+    elif typo_type == "missing_space":
+        # Supprimer un espace
+        if " " in text:
+            spaces = [i for i, c in enumerate(text) if c == " "]
+            if spaces:
+                idx = random.choice(spaces)
+                text = text[:idx] + text[idx+1:]
+
+    elif typo_type == "lowercase":
+        # Tout en minuscules
+        text = text.lower()
+
+    return text
+
+
 # Templates de requêtes en français par domaine
 TEMPLATES_FR = {
     "light": {
@@ -40,6 +113,23 @@ TEMPLATES_FR = {
             "Tamise {location} à {brightness}%",
             "{entity_name} à {brightness} pourcent",
         ],
+        "get_state": [
+            "Est-ce que la lumière {location} est allumée ?",
+            "La lumière {location} est allumée ?",
+            "Est-ce que {entity_name} est allumée ?",
+            "Quel est l'état de la lumière {location} ?",
+            "La lumière {location} est éteinte ?",
+        ],
+    },
+    "person": {
+        "get_state": [
+            "Où est {entity_name} ?",
+            "Où se trouve {entity_name} ?",
+            "{entity_name} est où ?",
+            "Est-ce que {entity_name} est à la maison ?",
+            "{entity_name} est à la maison ?",
+            "Quelle est la position de {entity_name} ?",
+        ],
     },
     "switch": {
         "turn_on": [
@@ -53,6 +143,11 @@ TEMPLATES_FR = {
             "Désactive {entity_name}",
             "Arrête {entity_name}",
             "Coupe {entity_name}",
+        ],
+        "get_state": [
+            "Est-ce que {entity_name} est allumé ?",
+            "{entity_name} est activé ?",
+            "Quel est l'état de {entity_name} ?",
         ],
     },
     "climate": {
@@ -79,6 +174,13 @@ TEMPLATES_FR = {
             "Éteins le chauffage",
             "Arrête la climatisation",
             "Coupe le chauffage",
+        ],
+        "get_state": [
+            "Quelle est la température {location} ?",
+            "Il fait combien {location} ?",
+            "Quelle température fait-il {location} ?",
+            "Le chauffage est allumé ?",
+            "Quel est le mode du thermostat ?",
         ],
     },
     "cover": {
@@ -402,14 +504,28 @@ class DatasetGenerator:
                         )
                         actual_action = action
 
+                    # Version normale
                     examples.append(MultiTurnExample(
                         user_query=query,
                         domain=domain,
                         available_entities=available_entity_ids,
                         target_entity=entity_id,
                         action=actual_action,
-                        action_params=action_params,
+                        action_params=action_params.copy(),
                     ))
+
+                    # Version avec fautes de frappe (50% du temps)
+                    if random.random() < 0.5:
+                        typo_query = add_typos(query, probability=1.0)
+                        if typo_query != query:  # Seulement si différent
+                            examples.append(MultiTurnExample(
+                                user_query=typo_query,
+                                domain=domain,
+                                available_entities=available_entity_ids,
+                                target_entity=entity_id,
+                                action=actual_action,
+                                action_params=action_params.copy(),
+                            ))
 
         # Mélanger et limiter pour équilibrer les domaines
         random.shuffle(examples)
@@ -424,7 +540,7 @@ class DatasetGenerator:
 
         all_examples = []
 
-        domains = ["light", "switch", "climate", "cover", "lock", "scene", "fan"]
+        domains = ["light", "switch", "climate", "cover", "lock", "scene", "fan", "person"]
 
         for domain in tqdm(domains, desc="Domaines"):
             examples = self._generate_domain_examples(domain)
