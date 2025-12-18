@@ -134,6 +134,12 @@ class GemmaHAChat:
                     value = int(value)
                 params[key.strip()] = value
 
+        # Corriger l'entity_id si elle n'existe pas exactement
+        if "entity_id" in params:
+            best_match = self._find_best_entity(params["entity_id"])
+            if best_match and best_match != params["entity_id"]:
+                params["entity_id"] = best_match
+
         # Corriger le domaine du service basé sur l'entity_id
         func_name = self._fix_service_domain(func_name, params)
 
@@ -155,6 +161,34 @@ class GemmaHAChat:
                 return f"{entity_domain}.{service}"
 
         return func_name
+
+    def _find_best_entity(self, entity_id: str) -> Optional[str]:
+        """Trouve l'entité la plus proche si elle n'existe pas exactement."""
+        # Collecter toutes les entités
+        all_entities = []
+        for entities in self.entities_cache.values():
+            all_entities.extend(entities)
+
+        # Entité exacte existe
+        if entity_id in all_entities:
+            return entity_id
+
+        # Chercher par correspondance partielle
+        entity_name = entity_id.split(".")[-1] if "." in entity_id else entity_id
+        domain = entity_id.split(".")[0] if "." in entity_id else None
+
+        # Chercher dans le même domaine d'abord
+        if domain and domain in self.entities_cache:
+            for e in self.entities_cache[domain]:
+                if entity_name in e or e.split(".")[-1] in entity_name:
+                    return e
+
+        # Chercher dans tous les domaines
+        for e in all_entities:
+            if entity_name in e or e.split(".")[-1] in entity_name:
+                return e
+
+        return None
 
     def generate(self, prompt: str, max_new_tokens: int = 100) -> str:
         """Génère une réponse avec llama.cpp."""
