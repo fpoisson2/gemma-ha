@@ -35,16 +35,13 @@ class GemmaHAChat:
 
     def __init__(
         self,
-        model_path: str,
+        gguf_path: str,
         ha_client: Optional[HomeAssistantClient] = None,
         n_ctx: int = 2048,
         n_threads: int = -1,
         n_gpu_layers: int = 0,
     ):
-        self.model_path = model_path
-        self.gguf_path = os.path.join(
-            model_path, "Functiongemma-Ha-Merged-268M-F16.gguf"
-        )
+        self.gguf_path = gguf_path
         self.ha_client = ha_client
         self.n_ctx = n_ctx
         self.n_threads = n_threads
@@ -59,6 +56,12 @@ class GemmaHAChat:
         print("=" * 50, flush=True)
 
         if not os.path.exists(self.gguf_path):
+            print(f"Erreur: Modèle GGUF non trouvé: {self.gguf_path}")
+            print("\nPour convertir le modèle HuggingFace en GGUF:")
+            print("  cd llama.cpp")
+            print("  python convert_hf_to_gguf.py ../functiongemma-ha-merged --outfile model.gguf")
+            print("\nPuis relancer avec:")
+            print("  python chat.py --model /chemin/vers/model.gguf")
             raise FileNotFoundError(f"Modèle GGUF non trouvé: {self.gguf_path}")
 
         print(f"Modèle: {self.gguf_path}", flush=True)
@@ -328,6 +331,12 @@ async def main():
         description="Chat Home Assistant avec FunctionGemma (llama.cpp)"
     )
     parser.add_argument(
+        "--model",
+        type=str,
+        required=True,
+        help="Chemin vers le fichier GGUF du modèle",
+    )
+    parser.add_argument(
         "--n-ctx",
         type=int,
         default=2048,
@@ -364,12 +373,9 @@ async def main():
     if not args.no_ha:
         ha_client = HomeAssistantClient.from_env(config["home_assistant"]["url"])
 
-    # Chemin du modèle fine-tuné
-    model_path = os.path.join(os.path.dirname(__file__), "..", "functiongemma-ha")
-
     # Créer le chat
     chat = GemmaHAChat(
-        model_path=model_path,
+        gguf_path=args.model,
         ha_client=ha_client,
         n_ctx=args.n_ctx,
         n_threads=args.n_threads,
