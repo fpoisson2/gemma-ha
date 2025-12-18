@@ -62,7 +62,7 @@ def setup_model_and_tokenizer(config: dict):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
-        torch_dtype=torch.bfloat16 if config["model"]["dtype"] == "bfloat16" else torch.float16,
+        dtype=torch.bfloat16 if config["model"]["dtype"] == "bfloat16" else torch.float16,
         device_map="auto",
         trust_remote_code=True,
     )
@@ -106,6 +106,11 @@ def setup_lora(model, config: dict):
 
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+
+    # Activer gradient checkpointing si configuré
+    if training_config.get("gradient_checkpointing", False):
+        print("Activation du gradient checkpointing...")
+        model.gradient_checkpointing_enable()
 
     return model
 

@@ -75,7 +75,7 @@ class GemmaHAChat:
         print("   Chargement du modèle (peut prendre 30-60s)...", flush=True)
         base_model = AutoModelForCausalLM.from_pretrained(
             self.base_model,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map=device_map,
             trust_remote_code=True,
         )

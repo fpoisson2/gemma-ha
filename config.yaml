@@ -11,8 +11,8 @@ home_assistant:
 # Modèle de base
 model:
   name: "google/functiongemma-270m-it"
-  max_length: 2048
-  dtype: "float16"
+  max_length: 512  # Réduit pour économiser la mémoire
+  dtype: "bfloat16"
 
 # Configuration du fine-tuning
 training:
@@ -31,8 +31,9 @@ training:
     - "down_proj"
 
   # Hyperparamètres
-  batch_size: 4
-  gradient_accumulation_steps: 4
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
   learning_rate: 2.0e-4
   num_epochs: 3
   warmup_ratio: 0.1
