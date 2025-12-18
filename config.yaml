@@ -1,0 +1,66 @@
+# Configuration pour FunctionGemma Home Assistant
+
+# Home Assistant
+home_assistant:
+  # URL de votre instance Home Assistant
+  url: "https://ha.ve2fpd.com"
+  # Token d'accès longue durée (à configurer dans .env)
+  # Créer via: Profil -> Sécurité -> Jetons d'accès longue durée
+  token_env: "HA_TOKEN"
+
+# Modèle de base
+model:
+  name: "google/functiongemma-270m-it"
+  max_length: 2048
+  dtype: "float16"
+
+# Configuration du fine-tuning
+training:
+  # LoRA pour efficacité mémoire
+  use_lora: true
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+  # Hyperparamètres
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  num_epochs: 3
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  # Sauvegarde
+  output_dir: "./output"
+  save_steps: 100
+  logging_steps: 10
+
+# Dataset
+dataset:
+  # Nombre d'exemples à générer par fonction
+  examples_per_function: 50
+  # Langues
+  languages:
+    - "fr"
+  # Répertoire de sortie
+  output_dir: "./data"
+  # Seed pour reproductibilité
+  seed: 42
+
+# Évaluation
+evaluation:
+  # Pourcentage du dataset pour validation
+  val_split: 0.1
+  # Métriques
+  metrics:
+    - "accuracy"
+    - "f1"

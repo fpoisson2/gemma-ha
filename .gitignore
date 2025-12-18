@@ -1,0 +1,23 @@
+# Environnement
+.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Données et modèles
+data/
+output/
+*.pt
+*.bin
+*.safetensors
+wandb/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
