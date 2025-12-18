@@ -48,9 +48,9 @@ training:
 # Dataset
 dataset:
   # Nombre d'exemples à générer par action/entité
-  examples_per_function: 200
+  examples_per_function: 500
   # Limite par domaine pour équilibrer le dataset
-  examples_per_domain: 300
+  examples_per_domain: 800
   # Langues
   languages:
     - "fr"
