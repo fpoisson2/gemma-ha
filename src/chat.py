@@ -40,12 +40,14 @@ class GemmaHAChat:
         n_ctx: int = 2048,
         n_threads: int = -1,
         n_gpu_layers: int = 0,
+        fast_mode: bool = False,
     ):
         self.gguf_path = gguf_path
         self.ha_client = ha_client
         self.n_ctx = n_ctx
         self.n_threads = n_threads
         self.n_gpu_layers = n_gpu_layers
+        self.fast_mode = fast_mode
         self.llm = None
         self.entities_cache: dict[str, list[str]] = {}
 
@@ -195,6 +197,62 @@ class GemmaHAChat:
         except Exception as e:
             return f"Erreur: {e}"
 
+    def _build_entities_context(self) -> str:
+        """Construit le contexte des entités disponibles."""
+        supported = ["light", "switch", "climate", "scene", "lock", "cover", "fan"]
+        parts = []
+        for domain in supported:
+            entities = self.entities_cache.get(domain, [])
+            if entities:
+                entities_str = ", ".join(entities[:10])
+                parts.append(f"{domain}: {entities_str}")
+        return "\n".join(parts) if parts else "Aucune entité disponible"
+
+    async def process_query_fast(self, query: str) -> str:
+        """
+        Mode rapide : 1 seule passe d'inférence.
+        Les entités sont injectées directement dans le prompt.
+        """
+        output = []
+        total_start = time.perf_counter()
+
+        # Construire le contexte avec toutes les entités
+        entities_context = self._build_entities_context()
+
+        # Une seule passe d'inférence
+        t1 = time.perf_counter()
+        prompt = (
+            f"<start_of_turn>system\n"
+            f"Entités disponibles:\n{entities_context}<end_of_turn>\n"
+            f"<start_of_turn>user\n{query}<end_of_turn>\n"
+            f"<start_of_turn>model\n"
+        )
+        response = self.generate(prompt, max_new_tokens=50)
+        t1_elapsed = time.perf_counter() - t1
+        output.append(f"Inference ({t1_elapsed:.2f}s)")
+        output.append(f"   Modèle: {response}")
+
+        action, action_params = self.parse_function_call(response)
+
+        if not action:
+            output.append(f"\nPas d'action détectée")
+            return "\n".join(output)
+
+        output.append(f"   -> Action: {action}")
+        output.append(f"   -> Paramètres: {action_params}")
+
+        # Exécuter sur Home Assistant
+        t2 = time.perf_counter()
+        result = await self.call_ha_service(action, action_params)
+        t2_elapsed = time.perf_counter() - t2
+
+        total_elapsed = time.perf_counter() - total_start
+        output.append(f"\nHA ({t2_elapsed:.2f}s)")
+        output.append(f"   {result}")
+        output.append(f"\nTotal: {total_elapsed:.2f}s")
+
+        return "\n".join(output)
+
     async def process_query(self, query: str) -> str:
         """
         Traite une requête utilisateur avec le flow multi-turn complet.
@@ -277,6 +335,8 @@ class GemmaHAChat:
         print("\n" + "=" * 50)
         print("Chat Home Assistant")
         print("=" * 50)
+        mode_str = "FAST (1 passe)" if self.fast_mode else "NORMAL (2 passes)"
+        print(f"Mode: {mode_str}")
         print("\nExemples de commandes:")
         print("  - Allume la lumière du salon")
         print("  - Mets le chauffage à 21 degrés")
@@ -285,6 +345,7 @@ class GemmaHAChat:
         print("\nCommandes spéciales:")
         print("  - entities       -> liste les domaines")
         print("  - entities light -> liste les lumières")
+        print("  - fast           -> basculer mode rapide")
         print("  - quit           -> quitter")
         print()
 
@@ -302,6 +363,12 @@ class GemmaHAChat:
                 print("Au revoir!")
                 break
 
+            if query.lower() == "fast":
+                self.fast_mode = not self.fast_mode
+                mode_str = "FAST (1 passe)" if self.fast_mode else "NORMAL (2 passes)"
+                print(f"Mode: {mode_str}")
+                continue
+
             if query.lower() == "entities":
                 for domain, entities in self.entities_cache.items():
                     print(f"  {domain}: {len(entities)} entités")
@@ -317,7 +384,10 @@ class GemmaHAChat:
             # Traiter la requête
             print("\033[90mTraitement...\033[0m")
             try:
-                result = await self.process_query(query)
+                if self.fast_mode:
+                    result = await self.process_query_fast(query)
+                else:
+                    result = await self.process_query(query)
                 print(f"\033[92mAssistant:\033[0m\n{result}\n")
             except Exception as e:
                 print(f"\033[91mErreur: {e}\033[0m\n")
@@ -359,6 +429,11 @@ async def main():
         action="store_true",
         help="Mode simulation sans Home Assistant",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Mode rapide (1 passe au lieu de 2)",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -380,6 +455,7 @@ async def main():
         n_ctx=args.n_ctx,
         n_threads=args.n_threads,
         n_gpu_layers=args.n_gpu_layers,
+        fast_mode=args.fast,
     )
 
     # Charger le modèle
