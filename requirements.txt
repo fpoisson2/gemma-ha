@@ -6,11 +6,24 @@ torch>=2.1.0
 transformers>=4.45.0
 accelerate>=0.25.0
 datasets>=2.16.0
+flash_attn>=2.5.0
+
+# ONNX Runtime for optimized inference
+onnxruntime>=1.17.0
+onnxruntime-tools>=1.7.0
+optimum[onnxruntime]>=1.17.0
+
+# TensorRT (if available)
+tensorrt>=8.6.0; sys_platform == 'linux'
+nvidia-tensorrt>=99.0.0; sys_platform == 'linux'
 
 # Efficient fine-tuning
 peft>=0.7.0
 bitsandbytes>=0.41.0
 trl>=0.7.0
+
+# Quantization GPTQ (optional)
+auto-gptq>=0.7.0; sys_platform == 'linux'
 
 # Home Assistant API
 aiohttp>=3.9.0

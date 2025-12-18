@@ -21,3 +21,5 @@ wandb/
 # Logs
 *.log
 logs/
+llama.cpp/
+functiongemma-ha-merged/Functiongemma-Ha-Merged-268M-F16.gguf

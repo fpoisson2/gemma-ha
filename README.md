@@ -92,6 +92,36 @@ python src/inference.py --query "Allume la lumière du salon"
 python src/inference.py --query "Allume la lumière du salon" --execute
 ```
 
+### Exécution avec llama.cpp
+
+⚠️ **Note**: Pour des résultats optimaux, utilisez le script d'inférence Python ci-dessous plutôt que llama.cpp directement, car llama.cpp ne gère pas correctement le template de chat FunctionGemma.
+
+Pour une exécution optimisée sur CPU avec llama.cpp :
+
+#### Prérequis
+
+- Avoir compilé llama.cpp (voir [documentation officielle](https://github.com/ggerganov/llama.cpp))
+
+#### Conversion du modèle (déjà faite)
+
+Le modèle est déjà converti au format GGUF dans `functiongemma-ha-merged/Functiongemma-Ha-Merged-268M-F16.gguf`.
+
+#### Exécution (non recommandé)
+
+```bash
+cd llama.cpp/build/bin
+./llama-simple -m ../../../functiongemma-ha-merged/Functiongemma-Ha-Merged-268M-F16.gguf --prompt "<start_of_turn>developer
+Tu es un assistant qui contrôle une maison intelligente avec Home Assistant. Tu dois appeler les fonctions appropriées pour répondre aux demandes de l'utilisateur.
+<end_of_turn>
+<start_of_turn>user
+Allume la lumière du salon
+<end_of_turn>
+<start_of_turn>model
+"
+```
+
+**Recommandé**: Utilisez plutôt le script Python pour des résultats corrects.
+
 ## Structure du projet
 
 ```

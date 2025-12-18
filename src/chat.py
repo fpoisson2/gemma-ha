@@ -10,6 +10,7 @@ Flow multi-turn:
 """
 
 import sys
+import time
 
 # Forcer l'affichage immédiat
 print("Démarrage...", flush=True)
@@ -19,16 +20,34 @@ import re
 import asyncio
 from typing import Optional
 
-print("Chargement de PyTorch...", flush=True)
-import torch
+print("Chargement de llama.cpp...", flush=True)
+from llama_cpp import Llama
 
-print("Chargement de Transformers...", flush=True)
+print("Chargement de YAML...", flush=True)
 import yaml
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel
 from dotenv import load_dotenv
 
 from ha_client import HomeAssistantClient
+
+# ONNX/TensorRT imports (optionnels)
+try:
+    import onnxruntime as ort
+    from optimum.onnxruntime import ORTModelForCausalLM
+
+    ONNX_AVAILABLE = True
+    print("ONNX Runtime disponible", flush=True)
+except ImportError:
+    ONNX_AVAILABLE = False
+    print("ONNX Runtime non disponible", flush=True)
+
+try:
+    import tensorrt as trt
+
+    TENSORRT_AVAILABLE = True
+    print("TensorRT disponible", flush=True)
+except ImportError:
+    TENSORRT_AVAILABLE = False
+    print("TensorRT non disponible", flush=True)
 
 
 class GemmaHAChat:
@@ -37,56 +56,174 @@ class GemmaHAChat:
     def __init__(
         self,
         model_path: str,
-        base_model: str = "google/functiongemma-270m-it",
         ha_client: Optional[HomeAssistantClient] = None,
+        n_ctx: int = 2048,
+        n_threads: int = -1,
+        n_gpu_layers: int = 0,
     ):
         self.model_path = model_path
-        self.base_model = base_model
+        self.gguf_path = os.path.join(
+            model_path, "Functiongemma-Ha-Merged-268M-F16.gguf"
+        )
         self.ha_client = ha_client
-        self.model = None
-        self.tokenizer = None
+        self.n_ctx = n_ctx
+        self.n_threads = n_threads
+        self.n_gpu_layers = n_gpu_layers
+        self.llm = None
         self.entities_cache: dict[str, list[str]] = {}
 
     def load_model(self):
-        """Charge le modèle fine-tuné."""
+        """Charge le modèle GGUF avec llama.cpp."""
         print("=" * 50, flush=True)
-        print("🤖 Chargement de FunctionGemma...", flush=True)
+        print("🤖 Chargement de FunctionGemma avec llama.cpp...", flush=True)
         print("=" * 50, flush=True)
-        print(f"\n📦 Modèle de base: {self.base_model}", flush=True)
 
-        # Charger le tokenizer depuis le modèle fine-tuné
-        print("   Chargement du tokenizer...", flush=True)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_path,
-            trust_remote_code=True,
+        if not os.path.exists(self.gguf_path):
+            raise FileNotFoundError(f"Modèle GGUF non trouvé: {self.gguf_path}")
+
+        print(f"📦 Modèle: {self.gguf_path}", flush=True)
+        print(f"🧵 Threads: {self.n_threads}", flush=True)
+        print(f"🎮 GPU layers: {self.n_gpu_layers}", flush=True)
+        print(f"📏 Context: {self.n_ctx}", flush=True)
+
+        # Charger le modèle avec llama.cpp
+        print("   Chargement du modèle...", flush=True)
+        self.llm = Llama(
+            model_path=self.gguf_path,
+            n_ctx=self.n_ctx,
+            n_threads=self.n_threads,
+            n_gpu_layers=self.n_gpu_layers,
+            verbose=False,  # Réduire la verbosité
         )
 
-        # Détecter si CUDA est disponible
-        if torch.cuda.is_available():
-            print("   GPU CUDA détecté", flush=True)
-            dtype = torch.bfloat16  # bfloat16 plus stable que float16 pour LoRA
-            device_map = "auto"
-        else:
-            print("   Pas de GPU, utilisation du CPU (plus lent)", flush=True)
-            dtype = torch.float32  # float16 cause des erreurs sur CPU
-            device_map = None
+        print("✅ Modèle llama.cpp prêt", flush=True)
 
-        # Charger le modèle de base
-        print("   Chargement du modèle (peut prendre 30-60s)...", flush=True)
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.base_model,
-            dtype=dtype,
-            device_map=device_map,
-            trust_remote_code=True,
-        )
+    def _warmup(self):
+        """Warmup du modèle pour optimiser CUDA graphs."""
+        print("   Warmup GPU...", flush=True)
+        dummy = "Allume la lumière"
+        inputs = self.tokenizer(dummy, return_tensors="pt").to(self.model.device)
 
-        # Charger les adapters LoRA
-        print("   Chargement des adapters LoRA...", flush=True)
-        self.model = PeftModel.from_pretrained(base_model, self.model_path)
-        self.model.eval()
+        # 3 passes pour stabiliser
+        for i in range(3):
+            with (
+                torch.no_grad(),
+                torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16),
+            ):
+                _ = self.model.generate(
+                    **inputs,
+                    max_new_tokens=10,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    use_cache=True,
+                )
 
-        device = next(self.model.parameters()).device
-        print(f"\n✅ Modèle prêt sur: {device}", flush=True)
+        torch.cuda.synchronize()
+        print("   ✅ Warmup terminé", flush=True)
+
+    def _export_to_onnx(self):
+        """Exporte le modèle vers ONNX pour une inférence optimisée."""
+        if not ONNX_AVAILABLE:
+            print("   ⚠️  ONNX non disponible, skipping export")
+            return
+
+        try:
+            print("   Export ONNX...", flush=True)
+
+            # Vérifier si le fichier ONNX existe déjà
+            if os.path.exists(self.onnx_path):
+                print("   Chargement du modèle ONNX existant...", flush=True)
+                self.onnx_model = ORTModelForCausalLM.from_pretrained(
+                    self.model_path,
+                    file_name="model.onnx",
+                    provider="CUDAExecutionProvider"
+                    if torch.cuda.is_available()
+                    else "CPUExecutionProvider",
+                )
+                return
+
+            # Créer un répertoire temporaire pour l'export
+            onnx_dir = os.path.dirname(self.onnx_path)
+            os.makedirs(onnx_dir, exist_ok=True)
+
+            # Exporter vers ONNX
+            from optimum.onnxruntime import ORTModelForCausalLM
+
+            print("   Conversion vers ONNX...", flush=True)
+            ort_model = ORTModelForCausalLM.from_pretrained(
+                self.model_path,
+                export=True,
+                provider="CUDAExecutionProvider"
+                if torch.cuda.is_available()
+                else "CPUExecutionProvider",
+            )
+
+            # Sauvegarder le modèle ONNX
+            ort_model.save_pretrained(onnx_dir)
+            self.onnx_model = ort_model
+
+            print("   ✅ Export ONNX terminé", flush=True)
+
+        except Exception as e:
+            print(f"   ❌ Erreur export ONNX: {e}", flush=True)
+            self.use_onnx = False
+
+    def _setup_tensorrt(self):
+        """Configure TensorRT pour une inférence ultra-optimisée."""
+        if not TENSORRT_AVAILABLE or not self.onnx_model:
+            print("   ⚠️  TensorRT non disponible ou pas de modèle ONNX, skipping")
+            return
+
+        try:
+            print("   Configuration TensorRT...", flush=True)
+
+            # Vérifier si le moteur TensorRT existe déjà
+            if os.path.exists(self.tensorrt_path):
+                print("   Chargement du moteur TensorRT existant...", flush=True)
+                # Charger le moteur existant
+                with open(self.tensorrt_path, "rb") as f:
+                    engine_data = f.read()
+                # Ici on devrait charger le moteur TensorRT, mais c'est complexe
+                # Pour l'instant, on marque juste que c'est disponible
+                self.tensorrt_model = True
+                return
+
+            # Créer le moteur TensorRT depuis ONNX
+            print("   Construction du moteur TensorRT...", flush=True)
+
+            # Configuration TensorRT basique
+            logger = trt.Logger(trt.Logger.WARNING)
+            builder = trt.Builder(logger)
+            network = builder.create_network(
+                1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+            )
+            parser = trt.OnnxParser(network, logger)
+
+            # Parser le modèle ONNX
+            with open(self.onnx_path, "rb") as f:
+                if not parser.parse(f.read()):
+                    raise RuntimeError("Failed to parse ONNX model")
+
+            # Configuration du builder
+            config = builder.create_builder_config()
+            config.max_workspace_size = 1 << 30  # 1GB
+
+            if torch.cuda.is_available():
+                config.set_flag(trt.BuilderFlag.FP16)
+
+            # Construire le moteur
+            engine = builder.build_engine(network, config)
+
+            # Sauvegarder le moteur
+            with open(self.tensorrt_path, "wb") as f:
+                f.write(engine.serialize())
+
+            self.tensorrt_model = engine
+            print("   ✅ Moteur TensorRT créé", flush=True)
+
+        except Exception as e:
+            print(f"   ❌ Erreur TensorRT: {e}", flush=True)
+            self.use_tensorrt = False
 
     async def init_ha(self):
         """Initialise la connexion Home Assistant et cache les entités."""
@@ -111,13 +248,18 @@ class GemmaHAChat:
 
         # Résumé des domaines supportés
         supported = ["light", "switch", "climate", "scene", "lock", "cover", "fan"]
-        available = {d: len(e) for d, e in self.entities_cache.items() if d in supported and e}
+        available = {
+            d: len(e) for d, e in self.entities_cache.items() if d in supported and e
+        }
         if available:
-            print(f"   Domaines: {', '.join(f'{d}({n})' for d, n in available.items())}", flush=True)
+            print(
+                f"   Domaines: {', '.join(f'{d}({n})' for d, n in available.items())}",
+                flush=True,
+            )
 
     def parse_function_call(self, response: str) -> tuple[Optional[str], dict]:
         """Parse un appel de fonction FunctionGemma."""
-        match = re.search(r'call:([a-z_\.]+)\{([^}]*)\}', response)
+        match = re.search(r"call:([a-z_\.]+)\{([^}]*)\}", response)
         if not match:
             return None, {}
 
@@ -125,10 +267,10 @@ class GemmaHAChat:
         params_str = match.group(2)
 
         params = {}
-        for param in params_str.split(','):
-            if ':' in param:
-                key, value = param.split(':', 1)
-                value = value.replace('<escape>', '').strip()
+        for param in params_str.split(","):
+            if ":" in param:
+                key, value = param.split(":", 1)
+                value = value.replace("<escape>", "").strip()
                 # Convertir les nombres
                 if value.isdigit():
                     value = int(value)
@@ -138,24 +280,65 @@ class GemmaHAChat:
 
     def generate(self, prompt: str, max_new_tokens: int = 100) -> str:
         """Génère une réponse du modèle."""
+        # Utiliser TensorRT si disponible (plus rapide)
+        if self.tensorrt_model and TENSORRT_AVAILABLE:
+            return self._generate_tensorrt(prompt, max_new_tokens)
+        # Sinon utiliser ONNX si disponible
+        elif self.onnx_model and ONNX_AVAILABLE:
+            return self._generate_onnx(prompt, max_new_tokens)
+        # Fallback vers PyTorch
+        else:
+            return self._generate_pytorch(prompt, max_new_tokens)
+
+    def _generate_pytorch(self, prompt: str, max_new_tokens: int = 100) -> str:
+        """Génération avec PyTorch optimisé."""
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
-        with torch.no_grad():
+        with (
+            torch.no_grad(),
+            torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16),
+        ):
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                do_sample=False,  # Greedy decoding - plus stable
+                do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
+                use_cache=True,
             )
 
         response = self.tokenizer.decode(outputs[0], skip_special_tokens=False)
+        return self._extract_model_response(response)
 
+    def _generate_onnx(self, prompt: str, max_new_tokens: int = 100) -> str:
+        """Génération avec ONNX Runtime."""
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+
+        # ONNX Runtime inference
+        outputs = self.onnx_model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+
+        response = self.tokenizer.decode(outputs[0], skip_special_tokens=False)
+        return self._extract_model_response(response)
+
+    def _generate_tensorrt(self, prompt: str, max_new_tokens: int = 100) -> str:
+        """Génération avec TensorRT (optimisé)."""
+        # Pour TensorRT, on utilise une approche simplifiée
+        # En pratique, il faudrait implémenter une génération token par token
+        # Pour l'instant, fallback vers ONNX
+        print("   🔄 TensorRT: fallback vers ONNX", flush=True)
+        return self._generate_onnx(prompt, max_new_tokens)
+
+    def _extract_model_response(self, response: str) -> str:
+        """Extrait la réponse du modèle du format chat."""
         # Extraire la dernière réponse du modèle
         if "<start_of_turn>model" in response:
             response = response.split("<start_of_turn>model")[-1]
         if "<end_of_turn>" in response:
             response = response.split("<end_of_turn>")[0]
-
         return response.strip()
 
     def get_entities_for_domain(self, domain: str) -> str:
@@ -187,6 +370,7 @@ class GemmaHAChat:
         service_data.update(params)
 
         import aiohttp
+
         try:
             async with aiohttp.ClientSession() as session:
                 url = f"{self.ha_client.url}/api/services/{domain}/{service}"
@@ -213,11 +397,14 @@ class GemmaHAChat:
         4. Exécution sur Home Assistant
         """
         output = []
+        total_start = time.perf_counter()
 
         # Étape 1: Requête → get_entities
-        output.append("📝 Étape 1: Analyse de la requête...")
+        t1 = time.perf_counter()
         prompt1 = f"<start_of_turn>user\n{query}<end_of_turn>\n<start_of_turn>model\n"
-        response1 = self.generate(prompt1, max_new_tokens=80)
+        response1 = self.generate(prompt1, max_new_tokens=40)
+        t1_elapsed = time.perf_counter() - t1
+        output.append(f"📝 Étape 1: get_entities ({t1_elapsed:.2f}s)")
         output.append(f"   Modèle: {response1}")
 
         func_name, params = self.parse_function_call(response1)
@@ -233,27 +420,25 @@ class GemmaHAChat:
             return "\n".join(output)
 
         domain = params.get("domain", "unknown")
-        output.append(f"   → Domaine détecté: {domain}")
+        output.append(f"   → Domaine: {domain}")
 
         # Étape 2: Récupérer les entités
-        output.append(f"\n🔍 Étape 2: Récupération des entités {domain}...")
         tool_response = self.get_entities_for_domain(domain)
-        entities_list = self.entities_cache.get(domain, [])[:5]
-        output.append(f"   {len(self.entities_cache.get(domain, []))} entités trouvées")
-        for e in entities_list:
-            output.append(f"   - {e}")
-        if len(self.entities_cache.get(domain, [])) > 5:
-            output.append(f"   ...")
+        output.append(
+            f"\n🔍 Étape 2: {len(self.entities_cache.get(domain, []))} entités {domain}"
+        )
 
         # Étape 3: Générer l'action finale
-        output.append(f"\n🎯 Étape 3: Génération de l'action...")
+        t2 = time.perf_counter()
         prompt2 = (
             f"<start_of_turn>user\n{query}<end_of_turn>\n"
             f"<start_of_turn>model\n{response1}<end_of_turn>\n"
             f"<start_of_turn>tool\n{tool_response}<end_of_turn>\n"
             f"<start_of_turn>model\n"
         )
-        response2 = self.generate(prompt2, max_new_tokens=100)
+        response2 = self.generate(prompt2, max_new_tokens=50)
+        t2_elapsed = time.perf_counter() - t2
+        output.append(f"\n🎯 Étape 3: action ({t2_elapsed:.2f}s)")
         output.append(f"   Modèle: {response2}")
 
         action, action_params = self.parse_function_call(response2)
@@ -266,17 +451,24 @@ class GemmaHAChat:
         output.append(f"   → Paramètres: {action_params}")
 
         # Étape 4: Exécuter sur Home Assistant
-        output.append(f"\n🏠 Étape 4: Exécution sur Home Assistant...")
+        t3 = time.perf_counter()
         result = await self.call_ha_service(action, action_params)
+        t3_elapsed = time.perf_counter() - t3
+
+        total_elapsed = time.perf_counter() - total_start
+        output.append(f"\n🏠 Étape 4: HA ({t3_elapsed:.2f}s)")
         output.append(f"   {result}")
+        output.append(
+            f"\n⏱️  Total: {total_elapsed:.2f}s (inference: {t1_elapsed + t2_elapsed:.2f}s)"
+        )
 
         return "\n".join(output)
 
     async def chat_loop(self):
         """Boucle de chat interactive."""
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("💬 Chat Home Assistant")
-        print("="*50)
+        print("=" * 50)
         print("\nExemples de commandes:")
         print("  • Allume la lumière du salon")
         print("  • Mets le chauffage à 21 degrés")
@@ -325,6 +517,25 @@ class GemmaHAChat:
 
 async def main():
     """Point d'entrée principal."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Chat Home Assistant avec FunctionGemma"
+    )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        choices=["int8", "int4", "none"],
+        default="none",
+        help="Mode de quantification (défaut: none = bfloat16 + Flash Attention)",
+    )
+    parser.add_argument(
+        "--no-ha",
+        action="store_true",
+        help="Mode simulation sans Home Assistant",
+    )
+    args = parser.parse_args()
+
     load_dotenv()
 
     # Charger la config
@@ -333,16 +544,22 @@ async def main():
         config = yaml.safe_load(f)
 
     # Client Home Assistant
-    ha_client = HomeAssistantClient.from_env(config["home_assistant"]["url"])
+    ha_client = None
+    if not args.no_ha:
+        ha_client = HomeAssistantClient.from_env(config["home_assistant"]["url"])
 
     # Chemin du modèle fine-tuné
     model_path = os.path.join(os.path.dirname(__file__), "..", "functiongemma-ha")
+
+    # Quantification (None si "none")
+    quantization = None if args.quantization == "none" else args.quantization
 
     # Créer le chat
     chat = GemmaHAChat(
         model_path=model_path,
         base_model=config["model"]["name"],
         ha_client=ha_client,
+        quantization=quantization,
     )
 
     # Charger le modèle

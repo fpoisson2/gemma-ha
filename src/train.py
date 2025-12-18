@@ -62,9 +62,12 @@ def setup_model_and_tokenizer(config: dict):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
-        dtype=torch.bfloat16 if config["model"]["dtype"] == "bfloat16" else torch.float16,
+        dtype=torch.bfloat16
+        if config["model"]["dtype"] == "bfloat16"
+        else torch.float16,
         device_map="auto",
         trust_remote_code=True,
+        attn_implementation="flash_attention_2",
     )
 
     # Charger le tokenizer
@@ -127,7 +130,7 @@ def load_and_prepare_dataset(config: dict, tokenizer):
         data_files={
             "train": os.path.join(data_dir, "train.jsonl"),
             "validation": os.path.join(data_dir, "val.jsonl"),
-        }
+        },
     )
 
     print(f"  Train: {len(dataset['train'])} exemples")
@@ -254,12 +257,14 @@ def train(config: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune FunctionGemma pour Home Assistant")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune FunctionGemma pour Home Assistant"
+    )
     parser.add_argument(
         "--config",
         type=str,
         default="config.yaml",
-        help="Chemin vers le fichier de configuration"
+        help="Chemin vers le fichier de configuration",
     )
     args = parser.parse_args()
 
