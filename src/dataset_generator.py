@@ -267,59 +267,57 @@ class DatasetGenerator:
                 entity_id = entity["entity_id"]
                 entity_name = self._get_entity_name(entity)
 
-                # Utiliser TOUS les templates pour chaque entité (plus de variété)
+                # Utiliser TOUS les templates pour plus de variété
                 for template in action_templates:
                     location = random.choice(LOCATIONS_FR)
+                    action_params = {}
 
-                # Générer la requête utilisateur
-                action_params = {}
+                    if "{brightness}" in template:
+                        brightness = random.choice([10, 25, 50, 75, 100])
+                        query = template.format(
+                            entity_name=entity_name,
+                            location=location,
+                            brightness=brightness
+                        )
+                        action_params["brightness_pct"] = brightness
+                        actual_action = "turn_on"
+                    elif "{temperature}" in template:
+                        temperature = random.choice([18, 19, 20, 21, 22, 23, 24])
+                        query = template.format(
+                            location=location,
+                            temperature=temperature
+                        )
+                        action_params["temperature"] = temperature
+                        actual_action = action
+                    elif "{mode}" in template:
+                        mode_fr = random.choice(list(HVAC_MODES_FR.keys()))
+                        query = template.format(mode=mode_fr)
+                        action_params["hvac_mode"] = HVAC_MODES_FR[mode_fr]
+                        actual_action = action
+                    elif "{position}" in template:
+                        position = random.choice([25, 50, 75])
+                        query = template.format(
+                            entity_name=entity_name,
+                            location=location,
+                            position=position
+                        )
+                        action_params["position"] = position
+                        actual_action = action
+                    else:
+                        query = template.format(
+                            entity_name=entity_name,
+                            location=location
+                        )
+                        actual_action = action
 
-                if "{brightness}" in template:
-                    brightness = random.choice([10, 25, 50, 75, 100])
-                    query = template.format(
-                        entity_name=entity_name,
-                        location=location,
-                        brightness=brightness
-                    )
-                    action_params["brightness_pct"] = brightness
-                    actual_action = "turn_on"  # brightness via turn_on
-                elif "{temperature}" in template:
-                    temperature = random.choice([18, 19, 20, 21, 22, 23, 24])
-                    query = template.format(
-                        location=location,
-                        temperature=temperature
-                    )
-                    action_params["temperature"] = temperature
-                    actual_action = action
-                elif "{mode}" in template:
-                    mode_fr = random.choice(list(HVAC_MODES_FR.keys()))
-                    query = template.format(mode=mode_fr)
-                    action_params["hvac_mode"] = HVAC_MODES_FR[mode_fr]
-                    actual_action = action
-                elif "{position}" in template:
-                    position = random.choice([25, 50, 75])
-                    query = template.format(
-                        entity_name=entity_name,
-                        location=location,
-                        position=position
-                    )
-                    action_params["position"] = position
-                    actual_action = action
-                else:
-                    query = template.format(
-                        entity_name=entity_name,
-                        location=location
-                    )
-                    actual_action = action
-
-                examples.append(MultiTurnExample(
-                    user_query=query,
-                    domain=domain,
-                    available_entities=available_entity_ids,
-                    target_entity=entity_id,
-                    action=actual_action,
-                    action_params=action_params,
-                ))
+                    examples.append(MultiTurnExample(
+                        user_query=query,
+                        domain=domain,
+                        available_entities=available_entity_ids,
+                        target_entity=entity_id,
+                        action=actual_action,
+                        action_params=action_params,
+                    ))
 
         return examples
 
