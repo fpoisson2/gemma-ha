@@ -18,8 +18,8 @@ model:
 training:
   # LoRA pour efficacité mémoire
   use_lora: true
-  lora_r: 16
-  lora_alpha: 32
+  lora_r: 32
+  lora_alpha: 64
   lora_dropout: 0.05
   lora_target_modules:
     - "q_proj"
@@ -47,7 +47,9 @@ training:
 # Dataset
 dataset:
   # Nombre d'exemples à générer par action/entité
-  examples_per_function: 100
+  examples_per_function: 200
+  # Limite par domaine pour équilibrer le dataset
+  examples_per_domain: 300
   # Langues
   languages:
     - "fr"

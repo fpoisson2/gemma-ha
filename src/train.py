@@ -130,7 +130,12 @@ def load_and_prepare_dataset(config: dict, tokenizer):
 
     def format_example(example):
         """Formate un exemple pour l'entraînement."""
-        messages = example["messages"]
+        # Si le texte est déjà formaté (format direct du dataset_generator)
+        if "text" in example and isinstance(example["text"], str):
+            return {"text": example["text"]}
+
+        # Sinon, utiliser le format messages
+        messages = example.get("messages", [])
         tools = example.get("tools", [])
 
         # Utiliser le chat template de FunctionGemma

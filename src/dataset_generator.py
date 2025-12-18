@@ -133,12 +133,39 @@ TEMPLATES_FR = {
     },
 }
 
-# Noms de pièces courants
-LOCATIONS_FR = [
-    "du salon", "de la chambre", "de la cuisine", "de la salle de bain",
-    "du bureau", "du couloir", "de l'entrée", "du garage",
-    "du jardin", "de la terrasse", "de la buanderie",
-]
+# Mapping des noms d'entités vers les locutions françaises
+# Clé: partie du nom d'entité (en minuscule), Valeur: forme française
+ENTITY_TO_LOCATION_FR = {
+    # Pièces principales
+    "salon": "du salon",
+    "chambre": "de la chambre",
+    "cuisine": "de la cuisine",
+    "salle_de_bain": "de la salle de bain",
+    "salle_a_manger": "de la salle à manger",
+    "bureau": "du bureau",
+    "couloir": "du couloir",
+    "entree": "de l'entrée",
+    "garage": "du garage",
+    "jardin": "du jardin",
+    "terrasse": "de la terrasse",
+    "buanderie": "de la buanderie",
+    "cave": "de la cave",
+    "grenier": "du grenier",
+    "balcon": "du balcon",
+    "salle_de_jeu": "de la salle de jeu",
+    # Chambres spécifiques
+    "chambre_francis": "de la chambre de Francis",
+    "chambre_noemie": "de la chambre de Noémie",
+    "chambre_laura": "de la chambre de Laura",
+    "chambre_francis_et_noemie": "de la chambre de Francis et Noémie",
+    # Extérieur
+    "outdoor": "extérieure",
+    "balcon_avant": "du balcon avant",
+    "balcon_arriere": "du balcon arrière",
+    # Autres
+    "armoire": "de l'armoire",
+    "armoire_cuisine": "de l'armoire de cuisine",
+}
 
 # Modes HVAC
 HVAC_MODES_FR = {
@@ -148,6 +175,30 @@ HVAC_MODES_FR = {
     "éco": "eco",
     "absent": "off",
 }
+
+
+def extract_location_from_entity(entity_id: str) -> Optional[str]:
+    """
+    Extrait la localisation française depuis un entity_id.
+
+    Exemple: light.salon → "du salon"
+             light.salle_de_bain → "de la salle de bain"
+             light.lumiere_cuisine → "de la cuisine"
+
+    Retourne None si aucune localisation n'est trouvée.
+    """
+    # Extraire la partie après le domaine (ex: "salon" de "light.salon")
+    entity_name = entity_id.split(".")[-1].lower()
+
+    # Chercher la correspondance la plus longue d'abord (pour éviter que "chambre"
+    # matche avant "chambre_laura")
+    sorted_keys = sorted(ENTITY_TO_LOCATION_FR.keys(), key=len, reverse=True)
+
+    for key in sorted_keys:
+        if key in entity_name:
+            return ENTITY_TO_LOCATION_FR[key]
+
+    return None
 
 
 def escape_param(value: str) -> str:
@@ -212,6 +263,34 @@ class MultiTurnExample:
 
         return {"text": text}
 
+    def to_one_step_format(self) -> dict:
+        """
+        Convertit en format d'entraînement one-step.
+
+        Pattern simplifié:
+        1. User demande une action + liste des entités disponibles
+        2. Model appelle directement l'action avec la bonne entité
+        """
+        # Liste des entités disponibles dans le prompt
+        entities_list = ", ".join(self.available_entities[:10])
+        user_prompt = f"{self.user_query}\n\nEntités {self.domain} disponibles: {entities_list}"
+
+        # Appel de l'action directe
+        action_params = {"entity_id": self.target_entity}
+        action_params.update(self.action_params)
+        action_call = format_function_call(
+            f"{self.domain}.{self.action}",
+            action_params
+        )
+
+        # Format texte pour l'entraînement
+        text = (
+            f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
+            f"<start_of_turn>model\n{action_call}<end_of_turn>"
+        )
+
+        return {"text": text}
+
 
 class DatasetGenerator:
     """Génère un dataset de fine-tuning multi-turn pour FunctionGemma."""
@@ -220,10 +299,12 @@ class DatasetGenerator:
         self,
         entities: list[dict],
         examples_per_action: int = 20,
+        examples_per_domain: int = 100,  # Limite par domaine pour équilibrer
         seed: int = 42
     ):
         self.entities = entities
         self.examples_per_action = examples_per_action
+        self.examples_per_domain = examples_per_domain
         self.examples: list[MultiTurnExample] = []
 
         random.seed(seed)
@@ -251,7 +332,7 @@ class DatasetGenerator:
         return [e["entity_id"] for e in self.entities_by_domain.get(domain, [])]
 
     def _generate_domain_examples(self, domain: str) -> list[MultiTurnExample]:
-        """Génère des exemples pour un domaine."""
+        """Génère des exemples pour un domaine (limité pour équilibrage)."""
         examples = []
         domain_entities = self.entities_by_domain.get(domain, [])
 
@@ -267,10 +348,21 @@ class DatasetGenerator:
                 entity_id = entity["entity_id"]
                 entity_name = self._get_entity_name(entity)
 
+                # Extraire la vraie localisation depuis le nom de l'entité
+                entity_location = extract_location_from_entity(entity_id)
+
                 # Utiliser TOUS les templates pour plus de variété
                 for template in action_templates:
-                    location = random.choice(LOCATIONS_FR)
                     action_params = {}
+
+                    # Pour les templates avec {location}, n'utiliser que si on a une vraie location
+                    if "{location}" in template:
+                        if entity_location is None:
+                            # Pas de location connue, skip ce template
+                            continue
+                        location = entity_location
+                    else:
+                        location = ""  # Non utilisé
 
                     if "{brightness}" in template:
                         brightness = random.choice([10, 25, 50, 75, 100])
@@ -319,6 +411,11 @@ class DatasetGenerator:
                         action_params=action_params,
                     ))
 
+        # Mélanger et limiter pour équilibrer les domaines
+        random.shuffle(examples)
+        if len(examples) > self.examples_per_domain:
+            examples = examples[:self.examples_per_domain]
+
         return examples
 
     def generate_all(self) -> list[MultiTurnExample]:
@@ -342,7 +439,7 @@ class DatasetGenerator:
 
         return all_examples
 
-    def save_dataset(self, output_dir: str, val_split: float = 0.1):
+    def save_dataset(self, output_dir: str, val_split: float = 0.1, include_one_step: bool = True):
         """Sauvegarde le dataset au format JSON Lines."""
         os.makedirs(output_dir, exist_ok=True)
 
@@ -355,25 +452,49 @@ class DatasetGenerator:
         train_path = os.path.join(output_dir, "train.jsonl")
         val_path = os.path.join(output_dir, "val.jsonl")
 
+        train_count = 0
+        val_count = 0
+
         with open(train_path, "w", encoding="utf-8") as f:
             for example in train_examples:
+                # Format multi-turn (get_entities → action)
                 data = example.to_training_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                train_count += 1
+
+                # Format one-step (entités dans le prompt → action directe)
+                if include_one_step:
+                    data_one_step = example.to_one_step_format()
+                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
+                    train_count += 1
 
         with open(val_path, "w", encoding="utf-8") as f:
             for example in val_examples:
+                # Format multi-turn
                 data = example.to_training_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                val_count += 1
+
+                # Format one-step
+                if include_one_step:
+                    data_one_step = example.to_one_step_format()
+                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
+                    val_count += 1
 
         print(f"Dataset sauvegardé:")
-        print(f"  Train: {train_path} ({len(train_examples)} exemples)")
-        print(f"  Val: {val_path} ({len(val_examples)} exemples)")
+        print(f"  Train: {train_path} ({train_count} exemples)")
+        print(f"  Val: {val_path} ({val_count} exemples)")
+        if include_one_step:
+            print(f"  (inclut multi-turn ET one-step pour chaque exemple)")
 
-        # Afficher un exemple
+        # Afficher des exemples
         if train_examples:
-            print(f"\nExemple de format:")
+            print(f"\nExemple multi-turn:")
             sample = train_examples[0].to_training_format()
             print(sample["text"])
+            print(f"\nExemple one-step:")
+            sample_one = train_examples[0].to_one_step_format()
+            print(sample_one["text"])
 
 
 async def main():
@@ -396,6 +517,7 @@ async def main():
     generator = DatasetGenerator(
         entities=entities,
         examples_per_action=config["dataset"].get("examples_per_function", 20),
+        examples_per_domain=config["dataset"].get("examples_per_domain", 100),
         seed=config["dataset"]["seed"]
     )
 
