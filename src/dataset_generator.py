@@ -90,6 +90,37 @@ def add_typos(text: str, probability: float = 0.3) -> str:
     return text
 
 
+# Préfixes de politesse et contexte pour variations
+POLITENESS_PREFIXES = [
+    "", "", "",  # Plus de chances sans préfixe
+    "S'il te plaît, ",
+    "Peux-tu ",
+    "Est-ce que tu peux ",
+    "Je voudrais que tu ",
+    "Merci de ",
+    "Tu peux ",
+    "J'aimerais que tu ",
+]
+
+URGENCY_PREFIXES = [
+    "", "", "",  # Plus de chances sans préfixe
+    "Vite, ",
+    "Rapidement, ",
+    "Tout de suite, ",
+    "Maintenant, ",
+    "Immédiatement, ",
+]
+
+CONTEXT_SUFFIXES = [
+    "", "", "", "",  # Plus de chances sans suffixe
+    " s'il te plaît",
+    " stp",
+    " merci",
+    " maintenant",
+    " tout de suite",
+    " quand tu peux",
+]
+
 # Templates de requêtes en français par domaine
 TEMPLATES_FR = {
     "light": {
@@ -115,6 +146,17 @@ TEMPLATES_FR = {
             "Ouvre les lumières {location}",
             "Ouvre {entity_name}",
             "Ouvre la light {location}",
+            # Nouvelles variations
+            "Donne-moi de la lumière {location}",
+            "J'ai besoin de lumière {location}",
+            "Il fait noir {location}",
+            "C'est trop sombre {location}",
+            "Rallume {location}",
+            "Remets la lumière {location}",
+            "Mets-moi la lumière {location}",
+            "Active la lumière {location}",
+            "Illumine {location}",
+            "Fais de la lumière {location}",
         ],
         "turn_off": [
             "Éteins la lumière {location}",
@@ -134,6 +176,16 @@ TEMPLATES_FR = {
             "Ferme les lumières {location}",
             "Ferme {entity_name}",
             "Ferme la light {location}",
+            # Nouvelles variations
+            "Enlève la lumière {location}",
+            "Arrête la lumière {location}",
+            "Stop la lumière {location}",
+            "Noir {location}",
+            "Plus besoin de lumière {location}",
+            "Désactive {entity_name}",
+            "Coupe tout {location}",
+            "Éteins-moi ça {location}",
+            "Fais le noir {location}",
         ],
         "set_brightness": [
             "Mets la lumière {location} à {brightness}%",
@@ -144,6 +196,13 @@ TEMPLATES_FR = {
             "Met {brightness} pourcent {location}",
             "Baisse la lumière {location} à {brightness}%",
             "Monte la lumière {location} à {brightness}%",
+            # Nouvelles variations
+            "Dimme {location} à {brightness}%",
+            "Ajuste la lumière {location} à {brightness}%",
+            "Je veux {brightness}% {location}",
+            "{brightness} pourcent de luminosité {location}",
+            "Lumière {location} {brightness} pour cent",
+            "Mets {location} à {brightness}",
         ],
         "get_state": [
             "Est-ce que la lumière {location} est allumée ?",
@@ -154,6 +213,12 @@ TEMPLATES_FR = {
             "C'est allumé {location} ?",
             "Les lumières {location} sont allumées ?",
             "Est-ce allumé {location} ?",
+            # Nouvelles variations
+            "La lumière {location} marche ?",
+            "Y'a de la lumière {location} ?",
+            "C'est éclairé {location} ?",
+            "Statut lumière {location}",
+            "État de {entity_name} ?",
         ],
     },
     "person": {
@@ -221,6 +286,19 @@ TEMPLATES_FR = {
             "Met le à {temperature}",
             "Monte à {temperature}",
             "Descend à {temperature}",
+            # Nouvelles variations
+            "Je veux qu'il fasse {temperature} degrés",
+            "Augmente à {temperature}",
+            "Diminue à {temperature}",
+            "Règle à {temperature}",
+            "{temperature}° dans la maison",
+            "Chauffe la maison à {temperature}",
+            "Refroidis à {temperature} degrés",
+            "Mets-moi {temperature} degrés",
+            "On met {temperature}",
+            "Change la température à {temperature}",
+            "Ajuste le thermostat à {temperature}",
+            "Configure {temperature} degrés",
         ],
         "set_hvac_mode": [
             "Mets le thermostat en mode {mode}",
@@ -228,6 +306,12 @@ TEMPLATES_FR = {
             "Active le mode {mode}",
             "Mode {mode}",
             "Met en {mode}",
+            # Nouvelles variations
+            "Change le mode en {mode}",
+            "Bascule en {mode}",
+            "Je veux le mode {mode}",
+            "Thermostat en {mode}",
+            "Passe le chauffage en {mode}",
         ],
         "turn_on": [
             "Allume le chauffage",
@@ -239,6 +323,16 @@ TEMPLATES_FR = {
             "Met le chauffage",
             "Allume la clim",
             "Ouvre la clim",
+            # Nouvelles variations
+            "Lance le chauffage",
+            "J'ai froid",
+            "J'ai chaud",
+            "Chauffe",
+            "Refroidis",
+            "Active la climatisation",
+            "Mets la clim",
+            "Je gèle",
+            "On crève de chaud",
         ],
         "turn_off": [
             "Éteins le chauffage",
@@ -249,6 +343,13 @@ TEMPLATES_FR = {
             "Ferme la clim",
             "Arrête le thermostat",
             "Coupe la clim",
+            # Nouvelles variations
+            "Stop le chauffage",
+            "Désactive le thermostat",
+            "Plus de chauffage",
+            "Arrête de chauffer",
+            "Arrête de refroidir",
+            "Coupe le thermostat",
         ],
         "get_state": [
             "Quelle est la température {location} ?",
@@ -261,6 +362,13 @@ TEMPLATES_FR = {
             "Il fait froid {location} ?",
             "Température {location} ?",
             "What's the temperature?",
+            # Nouvelles variations
+            "Combien de degrés {location} ?",
+            "La température actuelle ?",
+            "Quel temps fait-il à l'intérieur ?",
+            "Statut du chauffage",
+            "Le thermostat est à combien ?",
+            "État de la climatisation",
         ],
     },
     "cover": {
@@ -269,16 +377,46 @@ TEMPLATES_FR = {
             "Ouvre {entity_name}",
             "Lève les stores {location}",
             "Monte les volets {location}",
+            # Nouvelles variations
+            "Relève les volets {location}",
+            "Ouvre les stores {location}",
+            "Volets {location} ouverts",
+            "Monte les stores {location}",
+            "Lève {entity_name}",
+            "Je veux voir dehors {location}",
+            "Fais entrer la lumière {location}",
+            "Ouvre tout {location}",
         ],
         "close_cover": [
             "Ferme les volets {location}",
             "Ferme {entity_name}",
             "Baisse les stores {location}",
             "Descends les volets {location}",
+            # Nouvelles variations
+            "Abaisse les volets {location}",
+            "Ferme les stores {location}",
+            "Volets {location} fermés",
+            "Descends les stores {location}",
+            "Baisse {entity_name}",
+            "Cache le soleil {location}",
+            "Ferme tout {location}",
+            "Bloque la lumière {location}",
         ],
         "set_cover_position": [
             "Mets les volets {location} à {position}%",
             "Ouvre {entity_name} à {position}%",
+            # Nouvelles variations
+            "Volets {location} à {position}%",
+            "Position {position}% {location}",
+            "{position} pourcent les volets {location}",
+            "Règle les volets {location} à {position}",
+        ],
+        "get_state": [
+            "Les volets {location} sont ouverts ?",
+            "Les stores {location} sont fermés ?",
+            "État des volets {location}",
+            "Position des volets {location} ?",
+            "{entity_name} est ouvert ?",
         ],
     },
     "lock": {
@@ -286,11 +424,33 @@ TEMPLATES_FR = {
             "Verrouille {entity_name}",
             "Ferme à clé {location}",
             "Verrouille la porte {location}",
+            # Nouvelles variations
+            "Bloque la porte {location}",
+            "Met le verrou {location}",
+            "Sécurise {entity_name}",
+            "Lock {entity_name}",
+            "Ferme la serrure {location}",
+            "Active le verrou {location}",
+            "Barre la porte {location}",
         ],
         "unlock": [
             "Déverrouille {entity_name}",
             "Ouvre {entity_name}",
             "Débloque la porte {location}",
+            # Nouvelles variations
+            "Enlève le verrou {location}",
+            "Unlock {entity_name}",
+            "Ouvre la serrure {location}",
+            "Désactive le verrou {location}",
+            "Débarre la porte {location}",
+            "Ouvre la porte {location}",
+        ],
+        "get_state": [
+            "La porte {location} est verrouillée ?",
+            "{entity_name} est fermé ?",
+            "État de la serrure {location}",
+            "C'est verrouillé {location} ?",
+            "La porte est ouverte ?",
         ],
     },
     "scene": {
@@ -299,6 +459,17 @@ TEMPLATES_FR = {
             "Lance le mode {entity_name}",
             "Mets l'ambiance {entity_name}",
             "Scène {entity_name}",
+            # Nouvelles variations
+            "Démarre la scène {entity_name}",
+            "Exécute {entity_name}",
+            "Lance {entity_name}",
+            "Mode {entity_name}",
+            "Ambiance {entity_name}",
+            "Active {entity_name}",
+            "Je veux l'ambiance {entity_name}",
+            "Mets-moi la scène {entity_name}",
+            "Passe en mode {entity_name}",
+            "Configure la scène {entity_name}",
         ],
     },
     "fan": {
@@ -306,11 +477,31 @@ TEMPLATES_FR = {
             "Allume le ventilateur {location}",
             "Démarre {entity_name}",
             "Active la ventilation {location}",
+            # Nouvelles variations
+            "Lance le ventilo {location}",
+            "Mets le ventilateur {location}",
+            "J'ai besoin d'air {location}",
+            "Ventile {location}",
+            "Active {entity_name}",
+            "Fais de l'air {location}",
+            "Mets de l'air {location}",
         ],
         "turn_off": [
             "Éteins le ventilateur {location}",
             "Arrête {entity_name}",
             "Coupe la ventilation {location}",
+            # Nouvelles variations
+            "Stop le ventilateur {location}",
+            "Arrête le ventilo {location}",
+            "Plus de ventilation {location}",
+            "Désactive {entity_name}",
+            "Coupe le ventilo {location}",
+        ],
+        "get_state": [
+            "Le ventilateur {location} est allumé ?",
+            "{entity_name} tourne ?",
+            "État du ventilateur {location}",
+            "La ventilation {location} marche ?",
         ],
     },
 }
@@ -329,6 +520,11 @@ NEGATIVE_TEMPLATES = [
     ("Allume la lumière du garage", "entity_not_found", "Aucune entité 'light' trouvée pour 'garage'"),
     ("Éteins le plafonnier de la cave", "entity_not_found", "Aucune entité 'light' trouvée pour 'cave'"),
     ("Ouvre les stores de la mezzanine", "entity_not_found", "Aucune entité 'cover' trouvée pour 'mezzanine'"),
+    ("Lumière du vestibule", "entity_not_found", "Aucune entité 'light' trouvée pour 'vestibule'"),
+    ("Éclaire la bibliothèque", "entity_not_found", "Aucune entité 'light' trouvée pour 'bibliothèque'"),
+    ("Allume le cellier", "entity_not_found", "Aucune entité 'light' trouvée pour 'cellier'"),
+    ("Volets de l'atelier", "entity_not_found", "Aucune entité 'cover' trouvée pour 'atelier'"),
+    ("Chauffage du bureau de papa", "entity_not_found", "Aucune entité 'climate' trouvée pour 'bureau de papa'"),
     # Personnes inexistantes
     ("Où est Marie ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Marie'"),
     ("Est-ce que Pierre est à la maison ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Pierre'"),
@@ -336,6 +532,9 @@ NEGATIVE_TEMPLATES = [
     ("Où se trouve maman ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'maman'"),
     ("Papa est rentré ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'papa'"),
     ("Julie est où ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Julie'"),
+    ("Le chat est dehors ?", "entity_not_found", "Aucune entité trouvée pour 'chat'"),
+    ("Où sont les enfants ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'enfants'"),
+    ("Grand-mère est arrivée ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'grand-mère'"),
     # Appareils inexistants
     ("Allume le lave-vaisselle", "entity_not_found", "Aucune entité trouvée pour 'lave-vaisselle'"),
     ("Démarre la machine à laver", "entity_not_found", "Aucune entité trouvée pour 'machine à laver'"),
@@ -344,6 +543,20 @@ NEGATIVE_TEMPLATES = [
     ("Ferme les rideaux", "entity_not_found", "Aucune entité 'cover' trouvée pour 'rideaux'"),
     ("Allume le micro-ondes", "entity_not_found", "Aucune entité trouvée pour 'micro-ondes'"),
     ("Éteins le téléviseur de la salle de jeu", "entity_not_found", "Aucune entité 'media_player' trouvée pour 'salle de jeu'"),
+    ("Démarre le robot aspirateur", "entity_not_found", "Aucune entité 'vacuum' trouvée"),
+    ("Ouvre le garage", "entity_not_found", "Aucune entité 'cover' trouvée pour 'garage'"),
+    ("Allume la cafetière", "entity_not_found", "Aucune entité trouvée pour 'cafetière'"),
+    ("Éteins l'imprimante", "entity_not_found", "Aucune entité trouvée pour 'imprimante'"),
+    ("Démarre le sèche-linge", "entity_not_found", "Aucune entité trouvée pour 'sèche-linge'"),
+    ("Mets la musique", "entity_not_found", "Aucune entité 'media_player' configurée"),
+    ("Allume la télé", "entity_not_found", "Aucune entité 'media_player' trouvée pour 'télé'"),
+    ("Ouvre le frigo", "entity_not_found", "Aucune entité trouvée pour 'frigo'"),
+    # Scènes inexistantes
+    ("Active la scène romantique", "entity_not_found", "Aucune scène 'romantique' trouvée"),
+    ("Lance le mode fête", "entity_not_found", "Aucune scène 'fête' trouvée"),
+    ("Ambiance détente", "entity_not_found", "Aucune scène 'détente' trouvée"),
+    ("Mode nuit", "entity_not_found", "Aucune scène 'nuit' trouvée"),
+    ("Scène lecture", "entity_not_found", "Aucune scène 'lecture' trouvée"),
 ]
 
 # Templates de requêtes ambiguës ou incomplètes
@@ -360,6 +573,10 @@ AMBIGUOUS_TEMPLATES = [
     ("Baisse", "clarification_needed", "Précisez ce que vous voulez baisser"),
     ("Active", "clarification_needed", "Précisez ce que vous voulez activer"),
     ("Démarre", "clarification_needed", "Précisez ce que vous voulez démarrer"),
+    ("Change", "clarification_needed", "Précisez ce que vous voulez changer"),
+    ("Règle", "clarification_needed", "Précisez ce que vous voulez régler"),
+    ("Met", "clarification_needed", "Précisez ce que vous voulez mettre"),
+    ("Stop", "clarification_needed", "Précisez ce que vous voulez arrêter"),
     # Requêtes incomplètes coupées
     ("Allume la", "clarification_needed", "Requête incomplète"),
     ("Éteins le", "clarification_needed", "Requête incomplète"),
@@ -371,6 +588,10 @@ AMBIGUOUS_TEMPLATES = [
     ("La lumière", "clarification_needed", "Précisez l'action souhaitée"),
     ("Le chauffage", "clarification_needed", "Précisez l'action souhaitée"),
     ("Les volets", "clarification_needed", "Précisez l'action souhaitée"),
+    ("Il fait", "clarification_needed", "Requête incomplète"),
+    ("Je voudrais", "clarification_needed", "Requête incomplète"),
+    ("S'il te plaît", "clarification_needed", "Précisez votre demande"),
+    ("Tu peux", "clarification_needed", "Requête incomplète"),
     # Hors sujet
     ("Quel temps fait-il ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
     ("Quelle heure est-il ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
@@ -379,6 +600,17 @@ AMBIGUOUS_TEMPLATES = [
     ("Merci", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
     ("C'est quoi Home Assistant ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
     ("Comment ça marche ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    ("Salut", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Hello", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Bonsoir", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Aide-moi", "out_of_scope", "Dites-moi quelle action domotique vous souhaitez effectuer"),
+    ("Help", "out_of_scope", "Dites-moi quelle action domotique vous souhaitez effectuer"),
+    ("Qu'est-ce que tu sais faire ?", "out_of_scope", "Je peux contrôler vos lumières, chauffage, volets et autres appareils"),
+    ("T'es qui ?", "out_of_scope", "Je suis un assistant domotique pour Home Assistant"),
+    ("Ça va ?", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Quoi de neuf ?", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("C'est nul", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Tu es bête", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
     # Texte incompréhensible
     ("asdfjkl", "clarification_needed", "Je n'ai pas compris votre demande"),
     ("???", "clarification_needed", "Je n'ai pas compris votre demande"),
@@ -386,6 +618,21 @@ AMBIGUOUS_TEMPLATES = [
     ("lum salon", "clarification_needed", "Précisez l'action souhaitée pour la lumière du salon"),
     ("chauf 20", "clarification_needed", "Précisez quelle action effectuer"),
     ("sal", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("!!", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("ok", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("oui", "clarification_needed", "Précisez votre demande"),
+    ("non", "clarification_needed", "Précisez votre demande"),
+    ("lumiere", "clarification_needed", "Précisez l'action et la pièce"),
+    ("temp", "clarification_needed", "Précisez la température souhaitée"),
+    ("volet", "clarification_needed", "Précisez l'action (ouvrir/fermer) et la pièce"),
+    ("20 degrés", "clarification_needed", "Précisez quel thermostat régler"),
+    ("50%", "clarification_needed", "Précisez quel appareil régler"),
+    # Valeurs invalides
+    ("Mets le chauffage à 50 degrés", "invalid_value", "Température invalide. Plage acceptée: 15-30°C"),
+    ("Mets le chauffage à -5 degrés", "invalid_value", "Température invalide. Plage acceptée: 15-30°C"),
+    ("Mets la lumière à 150%", "invalid_value", "Luminosité invalide. Plage acceptée: 0-100%"),
+    ("Mets les volets à 200%", "invalid_value", "Position invalide. Plage acceptée: 0-100%"),
+    ("Température à 0", "invalid_value", "Température invalide. Plage acceptée: 15-30°C"),
 ]
 
 
@@ -732,10 +979,128 @@ class DatasetGenerator:
                                 action_params=action_params.copy(),
                             ))
 
+                    # Version avec préfixe de politesse (30% du temps)
+                    if random.random() < 0.3:
+                        prefix = random.choice(POLITENESS_PREFIXES)
+                        if prefix:
+                            polite_query = prefix + query[0].lower() + query[1:]
+                            examples.append(MultiTurnExample(
+                                user_query=polite_query,
+                                domain=domain,
+                                available_entities=available_entity_ids,
+                                target_entity=entity_id,
+                                action=actual_action,
+                                action_params=action_params.copy(),
+                            ))
+
+                    # Version avec suffixe contextuel (20% du temps)
+                    if random.random() < 0.2:
+                        suffix = random.choice(CONTEXT_SUFFIXES)
+                        if suffix:
+                            # Enlever le point ou ? à la fin si présent
+                            base_query = query.rstrip("?.! ")
+                            context_query = base_query + suffix
+                            examples.append(MultiTurnExample(
+                                user_query=context_query,
+                                domain=domain,
+                                available_entities=available_entity_ids,
+                                target_entity=entity_id,
+                                action=actual_action,
+                                action_params=action_params.copy(),
+                            ))
+
+        # Générer des exemples de confusion (entités similaires)
+        confusion_examples = self._generate_confusion_examples(domain, available_entity_ids)
+        examples.extend(confusion_examples)
+
         # Mélanger et limiter pour équilibrer les domaines
         random.shuffle(examples)
         if len(examples) > self.examples_per_domain:
             examples = examples[:self.examples_per_domain]
+
+        return examples
+
+    def _generate_confusion_examples(self, domain: str, entity_ids: list[str]) -> list[MultiTurnExample]:
+        """
+        Génère des exemples avec des entités similaires pour forcer le modèle à bien distinguer.
+        Ex: "lumière du salon" vs "lumière de la salle à manger"
+        """
+        examples = []
+
+        if len(entity_ids) < 2:
+            return examples
+
+        # Trouver des paires d'entités similaires (même préfixe ou contenant des mots similaires)
+        similar_pairs = []
+        for i, e1 in enumerate(entity_ids):
+            for e2 in entity_ids[i+1:]:
+                name1 = e1.split(".")[-1].lower()
+                name2 = e2.split(".")[-1].lower()
+
+                # Vérifier si les noms partagent des mots
+                words1 = set(name1.replace("_", " ").split())
+                words2 = set(name2.replace("_", " ").split())
+                common_words = words1 & words2
+
+                if common_words and len(common_words) < min(len(words1), len(words2)):
+                    similar_pairs.append((e1, e2))
+
+        # Générer des exemples de confusion pour chaque paire
+        confusion_templates = {
+            "light": [
+                "Allume la lumière {location}, pas {other_location}",
+                "C'est {location} que je veux allumer, pas {other_location}",
+                "Éteins seulement {location}",
+                "Juste la lumière {location}",
+            ],
+            "climate": [
+                "Mets le chauffage {location} à {temperature} degrés",
+                "Change la température {location}, pas {other_location}",
+            ],
+            "cover": [
+                "Ouvre les volets {location}, pas {other_location}",
+                "Ferme seulement les volets {location}",
+            ],
+        }
+
+        templates = confusion_templates.get(domain, [])
+        if not templates:
+            return examples
+
+        for e1, e2 in similar_pairs[:10]:  # Limiter à 10 paires
+            loc1 = extract_location_from_entity(e1)
+            loc2 = extract_location_from_entity(e2)
+
+            if not loc1 or not loc2:
+                continue
+
+            for template in templates:
+                if "{temperature}" in template:
+                    temp = random.choice([19, 20, 21, 22])
+                    query = template.format(
+                        location=loc1,
+                        other_location=loc2,
+                        temperature=temp
+                    )
+                    action_params = {"temperature": temp}
+                    action = "set_temperature"
+                else:
+                    query = template.format(location=loc1, other_location=loc2)
+                    action_params = {}
+                    action = "turn_on" if "allume" in template.lower() or "ouvre" in template.lower() else "turn_off"
+                    if "ouvre" in template.lower():
+                        action = "open_cover"
+                    elif "ferme" in template.lower():
+                        action = "close_cover"
+
+                examples.append(MultiTurnExample(
+                    user_query=query,
+                    domain=domain,
+                    available_entities=[e1, e2] + entity_ids[:5],  # Inclure les deux entités
+                    target_entity=e1,  # La première est la cible
+                    action=action,
+                    action_params=action_params,
+                ))
 
         return examples
 
