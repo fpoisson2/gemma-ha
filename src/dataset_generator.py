@@ -1351,7 +1351,7 @@ class DatasetGenerator:
 
     def generate_all(self) -> list[MultiTurnExample]:
         """Génère tous les exemples d'entraînement."""
-        print("Génération du dataset multi-turn...")
+        print("Génération du dataset (format one-step)...")
 
         all_examples = []
 
@@ -1377,8 +1377,13 @@ class DatasetGenerator:
 
         return all_examples
 
-    def save_dataset(self, output_dir: str, val_split: float = 0.1, include_one_step: bool = True):
-        """Sauvegarde le dataset au format JSON Lines."""
+    def save_dataset(self, output_dir: str, val_split: float = 0.1):
+        """
+        Sauvegarde le dataset au format JSON Lines.
+
+        Format simplifié: one-step uniquement (entités dans le prompt → action directe)
+        Pas de multi-turn avec get_entities.
+        """
         os.makedirs(output_dir, exist_ok=True)
 
         # Split train/val pour les exemples positifs
@@ -1399,22 +1404,10 @@ class DatasetGenerator:
         val_count = 0
 
         with open(train_path, "w", encoding="utf-8") as f:
-            # Exemples positifs
+            # Exemples positifs - format one-step uniquement
             for example in train_examples:
-                # Format multi-turn (get_entities → action)
-                data = example.to_training_format()
+                data = example.to_one_step_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
-                train_count += 1
-
-                # Format one-step (entités dans le prompt → action directe)
-                if include_one_step:
-                    data_one_step = example.to_one_step_format()
-                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
-                    train_count += 1
-
-                # Format single-turn (sans get_entities, direct)
-                data_single = example.to_single_turn_format()
-                f.write(json.dumps(data_single, ensure_ascii=False) + "\n")
                 train_count += 1
 
             # Exemples négatifs
@@ -1424,22 +1417,10 @@ class DatasetGenerator:
                 train_count += 1
 
         with open(val_path, "w", encoding="utf-8") as f:
-            # Exemples positifs
+            # Exemples positifs - format one-step uniquement
             for example in val_examples:
-                # Format multi-turn
-                data = example.to_training_format()
+                data = example.to_one_step_format()
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
-                val_count += 1
-
-                # Format one-step
-                if include_one_step:
-                    data_one_step = example.to_one_step_format()
-                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
-                    val_count += 1
-
-                # Format single-turn
-                data_single = example.to_single_turn_format()
-                f.write(json.dumps(data_single, ensure_ascii=False) + "\n")
                 val_count += 1
 
             # Exemples négatifs
@@ -1448,21 +1429,15 @@ class DatasetGenerator:
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
                 val_count += 1
 
-        print(f"Dataset sauvegardé:")
+        print(f"\n✅ Dataset sauvegardé (format one-step):")
         print(f"  Train: {train_path} ({train_count} exemples)")
         print(f"  Val: {val_path} ({val_count} exemples)")
-        print(f"  (inclut: multi-turn, one-step, single-turn, et négatifs)")
 
-        # Afficher des exemples
+        # Afficher un exemple
         if train_examples:
-            print(f"\nExemple positif (single-turn):")
-            sample = train_examples[0].to_single_turn_format()
+            print(f"\n📝 Exemple:")
+            sample = train_examples[0].to_one_step_format()
             print(sample["text"])
-
-        if neg_train_examples:
-            print(f"\nExemple négatif:")
-            sample_neg = neg_train_examples[0].to_training_format()
-            print(sample_neg["text"])
 
 
 async def main():
