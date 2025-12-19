@@ -110,10 +110,17 @@ def setup_lora(model, config: dict):
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
+    # IMPORTANT: Activer input_require_grads pour PEFT/LoRA
+    # Cela est nécessaire pour que les gradients se propagent correctement
+    model.enable_input_require_grads()
+
     # Activer gradient checkpointing si configuré
     if training_config.get("gradient_checkpointing", False):
-        print("Activation du gradient checkpointing...")
-        model.gradient_checkpointing_enable()
+        print("Activation du gradient checkpointing (use_reentrant=False)...")
+        # use_reentrant=False est requis pour PyTorch 2.x avec PEFT
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+        )
 
     return model
 
