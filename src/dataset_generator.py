@@ -17,6 +17,79 @@ import yaml
 from tqdm import tqdm
 
 
+# Variations de texte pour robustesse aux fautes de frappe
+def add_typos(text: str, probability: float = 0.3) -> str:
+    """Ajoute des fautes de frappe réalistes au texte."""
+    if random.random() > probability:
+        return text
+
+    typo_type = random.choice([
+        "missing_accent",
+        "missing_letter",
+        "double_letter",
+        "swap_letters",
+        "wrong_accent",
+        "missing_space",
+        "lowercase",
+    ])
+
+    if typo_type == "missing_accent":
+        # Supprimer les accents
+        replacements = [
+            ("é", "e"), ("è", "e"), ("ê", "e"), ("ë", "e"),
+            ("à", "a"), ("â", "a"),
+            ("ù", "u"), ("û", "u"),
+            ("î", "i"), ("ï", "i"),
+            ("ô", "o"), ("ö", "o"),
+            ("ç", "c"),
+        ]
+        for old, new in replacements:
+            if old in text and random.random() < 0.5:
+                text = text.replace(old, new, 1)
+                break
+
+    elif typo_type == "missing_letter" and len(text) > 5:
+        # Supprimer une lettre aléatoire
+        idx = random.randint(1, len(text) - 2)
+        text = text[:idx] + text[idx+1:]
+
+    elif typo_type == "double_letter" and len(text) > 3:
+        # Doubler une lettre
+        idx = random.randint(1, len(text) - 2)
+        if text[idx].isalpha():
+            text = text[:idx] + text[idx] + text[idx:]
+
+    elif typo_type == "swap_letters" and len(text) > 3:
+        # Échanger deux lettres adjacentes
+        idx = random.randint(1, len(text) - 3)
+        text = text[:idx] + text[idx+1] + text[idx] + text[idx+2:]
+
+    elif typo_type == "wrong_accent":
+        # Mauvais accent
+        replacements = [
+            ("é", "è"), ("è", "é"),
+            ("à", "a"), ("â", "à"),
+        ]
+        for old, new in replacements:
+            if old in text and random.random() < 0.5:
+                text = text.replace(old, new, 1)
+                break
+
+    elif typo_type == "missing_space":
+        # Supprimer un espace
+        if " " in text:
+            spaces = [i for i, c in enumerate(text) if c == " "]
+            if spaces:
+                idx = random.choice(spaces)
+                text = text[:idx] + text[idx+1:]
+
+    elif typo_type == "lowercase":
+        # Tout en minuscules
+        text = text.lower()
+
+    return text
+
+
 # Templates de requêtes en français par domaine
 TEMPLATES_FR = {
     "light": {
@@ -27,18 +100,77 @@ TEMPLATES_FR = {
             "Éclaire {location}",
             "Peux-tu allumer la lumière {location} ?",
             "Active l'éclairage {location}",
+            "Allume les lumières {location}",
+            "Je veux de la lumière {location}",
+            "Lumière {location} s'il te plaît",
+            "Allume tout {location}",
+            "Met la lumière {location}",
+            "On allume {location}",
+            "Allume moi la lumière {location}",
+            "Eclaire {location}",
+            "Light on {location}",
+            "Turn on {entity_name}",
+            # Québécois
+            "Ouvre la lumière {location}",
+            "Ouvre les lumières {location}",
+            "Ouvre {entity_name}",
+            "Ouvre la light {location}",
         ],
         "turn_off": [
             "Éteins la lumière {location}",
             "Éteins {entity_name}",
             "Coupe la lumière {location}",
             "Désactive l'éclairage {location}",
+            "Éteins les lumières {location}",
+            "Éteint la lumière {location}",
+            "Eteins {location}",
+            "Plus de lumière {location}",
+            "Coupe {location}",
+            "Éteindre {location}",
+            "Light off {location}",
+            "Turn off {entity_name}",
+            # Québécois
+            "Ferme la lumière {location}",
+            "Ferme les lumières {location}",
+            "Ferme {entity_name}",
+            "Ferme la light {location}",
         ],
         "set_brightness": [
             "Mets la lumière {location} à {brightness}%",
             "Règle la luminosité {location} à {brightness}%",
             "Tamise {location} à {brightness}%",
             "{entity_name} à {brightness} pourcent",
+            "Luminosité {location} {brightness}%",
+            "Met {brightness} pourcent {location}",
+            "Baisse la lumière {location} à {brightness}%",
+            "Monte la lumière {location} à {brightness}%",
+        ],
+        "get_state": [
+            "Est-ce que la lumière {location} est allumée ?",
+            "La lumière {location} est allumée ?",
+            "Est-ce que {entity_name} est allumée ?",
+            "Quel est l'état de la lumière {location} ?",
+            "La lumière {location} est éteinte ?",
+            "C'est allumé {location} ?",
+            "Les lumières {location} sont allumées ?",
+            "Est-ce allumé {location} ?",
+        ],
+    },
+    "person": {
+        "get_state": [
+            "Où est {entity_name} ?",
+            "Où se trouve {entity_name} ?",
+            "{entity_name} est où ?",
+            "Est-ce que {entity_name} est à la maison ?",
+            "{entity_name} est à la maison ?",
+            "Quelle est la position de {entity_name} ?",
+            "{entity_name} est là ?",
+            "T'es où {entity_name} ?",
+            "{entity_name} est rentré ?",
+            "Est-ce que {entity_name} est arrivé ?",
+            "{entity_name} est parti ?",
+            "Localise {entity_name}",
+            "Where is {entity_name}?",
         ],
     },
     "switch": {
@@ -47,12 +179,29 @@ TEMPLATES_FR = {
             "Active {entity_name}",
             "Mets {entity_name} en marche",
             "Démarre {entity_name}",
+            "Lance {entity_name}",
+            "Met {entity_name}",
+            "Allume le {entity_name}",
+            "Active le {entity_name}",
+            "Turn on {entity_name}",
         ],
         "turn_off": [
             "Éteins {entity_name}",
             "Désactive {entity_name}",
             "Arrête {entity_name}",
             "Coupe {entity_name}",
+            "Stoppe {entity_name}",
+            "Ferme {entity_name}",
+            "Éteins le {entity_name}",
+            "Turn off {entity_name}",
+        ],
+        "get_state": [
+            "Est-ce que {entity_name} est allumé ?",
+            "{entity_name} est activé ?",
+            "Quel est l'état de {entity_name} ?",
+            "{entity_name} marche ?",
+            "C'est allumé {entity_name} ?",
+            "{entity_name} est en marche ?",
         ],
     },
     "climate": {
@@ -64,21 +213,54 @@ TEMPLATES_FR = {
             "Chauffe à {temperature}°C",
             "Monte le chauffage à {temperature}",
             "Baisse la température à {temperature}",
+            "Met {temperature} degrés",
+            "{temperature} degrés s'il te plaît",
+            "Thermostat à {temperature}",
+            "Chauffage à {temperature}",
+            "Set temperature to {temperature}",
+            "Met le à {temperature}",
+            "Monte à {temperature}",
+            "Descend à {temperature}",
         ],
         "set_hvac_mode": [
             "Mets le thermostat en mode {mode}",
             "Passe en mode {mode}",
             "Active le mode {mode}",
+            "Mode {mode}",
+            "Met en {mode}",
         ],
         "turn_on": [
             "Allume le chauffage",
             "Démarre la climatisation",
             "Active le thermostat",
+            "Ouvre le chauffage",
+            "Part le chauffage",
+            "Démarre le chauffage",
+            "Met le chauffage",
+            "Allume la clim",
+            "Ouvre la clim",
         ],
         "turn_off": [
             "Éteins le chauffage",
             "Arrête la climatisation",
             "Coupe le chauffage",
+            "Ferme le chauffage",
+            "Éteins la clim",
+            "Ferme la clim",
+            "Arrête le thermostat",
+            "Coupe la clim",
+        ],
+        "get_state": [
+            "Quelle est la température {location} ?",
+            "Il fait combien {location} ?",
+            "Quelle température fait-il {location} ?",
+            "Le chauffage est allumé ?",
+            "Quel est le mode du thermostat ?",
+            "C'est à combien {location} ?",
+            "Il fait chaud {location} ?",
+            "Il fait froid {location} ?",
+            "Température {location} ?",
+            "What's the temperature?",
         ],
     },
     "cover": {
@@ -135,6 +317,78 @@ TEMPLATES_FR = {
 
 # Mapping des noms d'entités vers les locutions françaises
 # Clé: partie du nom d'entité (en minuscule), Valeur: forme française
+# Templates de requêtes impossibles (pas d'entité correspondante)
+NEGATIVE_TEMPLATES = [
+    # Pièces inexistantes
+    ("Allume la lumière de la piscine", "entity_not_found", "Aucune entité 'light' trouvée pour 'piscine'"),
+    ("Éteins les lumières du sous-sol", "entity_not_found", "Aucune entité 'light' trouvée pour 'sous-sol'"),
+    ("Ouvre les volets du grenier", "entity_not_found", "Aucune entité 'cover' trouvée pour 'grenier'"),
+    ("Mets le chauffage de la véranda à 20 degrés", "entity_not_found", "Aucune entité 'climate' trouvée pour 'véranda'"),
+    ("Ferme la lumière de la chambre d'amis", "entity_not_found", "Aucune entité 'light' trouvée pour 'chambre d'amis'"),
+    ("Allume le ventilateur de la salle de sport", "entity_not_found", "Aucune entité 'fan' trouvée pour 'salle de sport'"),
+    ("Allume la lumière du garage", "entity_not_found", "Aucune entité 'light' trouvée pour 'garage'"),
+    ("Éteins le plafonnier de la cave", "entity_not_found", "Aucune entité 'light' trouvée pour 'cave'"),
+    ("Ouvre les stores de la mezzanine", "entity_not_found", "Aucune entité 'cover' trouvée pour 'mezzanine'"),
+    # Personnes inexistantes
+    ("Où est Marie ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Marie'"),
+    ("Est-ce que Pierre est à la maison ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Pierre'"),
+    ("Localise le chien", "entity_not_found", "Aucune entité 'person' ou 'device_tracker' trouvée pour 'chien'"),
+    ("Où se trouve maman ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'maman'"),
+    ("Papa est rentré ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'papa'"),
+    ("Julie est où ?", "entity_not_found", "Aucune entité 'person' trouvée pour 'Julie'"),
+    # Appareils inexistants
+    ("Allume le lave-vaisselle", "entity_not_found", "Aucune entité trouvée pour 'lave-vaisselle'"),
+    ("Démarre la machine à laver", "entity_not_found", "Aucune entité trouvée pour 'machine à laver'"),
+    ("Éteins le four", "entity_not_found", "Aucune entité trouvée pour 'four'"),
+    ("Ouvre le portail", "entity_not_found", "Aucune entité 'cover' ou 'lock' trouvée pour 'portail'"),
+    ("Ferme les rideaux", "entity_not_found", "Aucune entité 'cover' trouvée pour 'rideaux'"),
+    ("Allume le micro-ondes", "entity_not_found", "Aucune entité trouvée pour 'micro-ondes'"),
+    ("Éteins le téléviseur de la salle de jeu", "entity_not_found", "Aucune entité 'media_player' trouvée pour 'salle de jeu'"),
+]
+
+# Templates de requêtes ambiguës ou incomplètes
+AMBIGUOUS_TEMPLATES = [
+    # Requêtes trop vagues
+    ("Allume", "clarification_needed", "Précisez ce que vous voulez allumer"),
+    ("Éteins", "clarification_needed", "Précisez ce que vous voulez éteindre"),
+    ("Allume tout", "clarification_needed", "Précisez quelles lumières vous voulez allumer"),
+    ("Éteins tout", "clarification_needed", "Précisez quelles lumières vous voulez éteindre"),
+    ("Ouvre", "clarification_needed", "Précisez ce que vous voulez ouvrir"),
+    ("Ferme", "clarification_needed", "Précisez ce que vous voulez fermer"),
+    ("Mets le chauffage", "clarification_needed", "Précisez la température souhaitée"),
+    ("Monte le chauffage", "clarification_needed", "Précisez la température souhaitée"),
+    ("Baisse", "clarification_needed", "Précisez ce que vous voulez baisser"),
+    ("Active", "clarification_needed", "Précisez ce que vous voulez activer"),
+    ("Démarre", "clarification_needed", "Précisez ce que vous voulez démarrer"),
+    # Requêtes incomplètes coupées
+    ("Allume la", "clarification_needed", "Requête incomplète"),
+    ("Éteins le", "clarification_needed", "Requête incomplète"),
+    ("Mets à", "clarification_needed", "Requête incomplète"),
+    ("Je veux", "clarification_needed", "Requête incomplète"),
+    ("Peux-tu", "clarification_needed", "Requête incomplète"),
+    ("Est-ce que", "clarification_needed", "Requête incomplète"),
+    ("Où est", "clarification_needed", "Requête incomplète"),
+    ("La lumière", "clarification_needed", "Précisez l'action souhaitée"),
+    ("Le chauffage", "clarification_needed", "Précisez l'action souhaitée"),
+    ("Les volets", "clarification_needed", "Précisez l'action souhaitée"),
+    # Hors sujet
+    ("Quel temps fait-il ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    ("Quelle heure est-il ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    ("Raconte-moi une blague", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    ("Bonjour", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("Merci", "out_of_scope", "Je suis un assistant domotique. Comment puis-je vous aider ?"),
+    ("C'est quoi Home Assistant ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    ("Comment ça marche ?", "out_of_scope", "Je ne peux que contrôler les appareils domotiques"),
+    # Texte incompréhensible
+    ("asdfjkl", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("???", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("...", "clarification_needed", "Je n'ai pas compris votre demande"),
+    ("lum salon", "clarification_needed", "Précisez l'action souhaitée pour la lumière du salon"),
+    ("chauf 20", "clarification_needed", "Précisez quelle action effectuer"),
+    ("sal", "clarification_needed", "Je n'ai pas compris votre demande"),
+]
+
+
 ENTITY_TO_LOCATION_FR = {
     # Pièces principales
     "salon": "du salon",
@@ -263,6 +517,30 @@ class MultiTurnExample:
 
         return {"text": text}
 
+    def to_single_turn_format(self) -> dict:
+        """
+        Convertit en format single-turn (sans get_entities).
+
+        Pattern simplifié:
+        1. User demande une action
+        2. Model appelle directement l'action avec la bonne entité
+        """
+        # Appel de l'action directe
+        action_params = {"entity_id": self.target_entity}
+        action_params.update(self.action_params)
+        action_call = format_function_call(
+            f"{self.domain}.{self.action}",
+            action_params
+        )
+
+        # Format texte pour l'entraînement
+        text = (
+            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+            f"<start_of_turn>model\n{action_call}<end_of_turn>"
+        )
+
+        return {"text": text}
+
     def to_one_step_format(self) -> dict:
         """
         Convertit en format d'entraînement one-step.
@@ -292,6 +570,32 @@ class MultiTurnExample:
         return {"text": text}
 
 
+@dataclass
+class NegativeExample:
+    """Un exemple négatif (entité non trouvée, requête ambiguë, etc.)."""
+    user_query: str
+    error_type: str  # "entity_not_found", "clarification_needed", "out_of_scope"
+    error_message: str
+
+    def to_training_format(self) -> dict:
+        """
+        Convertit en format d'entraînement avec appel de fonction erreur.
+        """
+        # Appel de fonction erreur
+        error_call = format_function_call(
+            f"error.{self.error_type}",
+            {"message": self.error_message}
+        )
+
+        # Format texte pour l'entraînement
+        text = (
+            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+            f"<start_of_turn>model\n{error_call}<end_of_turn>"
+        )
+
+        return {"text": text}
+
+
 class DatasetGenerator:
     """Génère un dataset de fine-tuning multi-turn pour FunctionGemma."""
 
@@ -300,12 +604,15 @@ class DatasetGenerator:
         entities: list[dict],
         examples_per_action: int = 20,
         examples_per_domain: int = 100,  # Limite par domaine pour équilibrer
+        negative_examples_multiplier: int = 3,  # Multiplier pour générer plus de négatifs
         seed: int = 42
     ):
         self.entities = entities
         self.examples_per_action = examples_per_action
         self.examples_per_domain = examples_per_domain
+        self.negative_examples_multiplier = negative_examples_multiplier
         self.examples: list[MultiTurnExample] = []
+        self.negative_examples: list[NegativeExample] = []
 
         random.seed(seed)
 
@@ -402,14 +709,28 @@ class DatasetGenerator:
                         )
                         actual_action = action
 
+                    # Version normale
                     examples.append(MultiTurnExample(
                         user_query=query,
                         domain=domain,
                         available_entities=available_entity_ids,
                         target_entity=entity_id,
                         action=actual_action,
-                        action_params=action_params,
+                        action_params=action_params.copy(),
                     ))
+
+                    # Version avec fautes de frappe (50% du temps)
+                    if random.random() < 0.5:
+                        typo_query = add_typos(query, probability=1.0)
+                        if typo_query != query:  # Seulement si différent
+                            examples.append(MultiTurnExample(
+                                user_query=typo_query,
+                                domain=domain,
+                                available_entities=available_entity_ids,
+                                target_entity=entity_id,
+                                action=actual_action,
+                                action_params=action_params.copy(),
+                            ))
 
         # Mélanger et limiter pour équilibrer les domaines
         random.shuffle(examples)
@@ -418,13 +739,57 @@ class DatasetGenerator:
 
         return examples
 
+    def _generate_negative_examples(self) -> list[NegativeExample]:
+        """Génère des exemples négatifs (entités non trouvées, requêtes ambiguës)."""
+        examples = []
+
+        # Générer plusieurs instances de chaque template négatif
+        for _ in range(self.negative_examples_multiplier):
+            # Entités non trouvées
+            for query, error_type, message in NEGATIVE_TEMPLATES:
+                # Version normale
+                examples.append(NegativeExample(
+                    user_query=query,
+                    error_type=error_type,
+                    error_message=message,
+                ))
+
+                # Version avec fautes de frappe (50% du temps)
+                if random.random() < 0.5:
+                    typo_query = add_typos(query, probability=1.0)
+                    if typo_query != query:
+                        examples.append(NegativeExample(
+                            user_query=typo_query,
+                            error_type=error_type,
+                            error_message=message,
+                        ))
+
+            # Requêtes ambiguës/incomplètes
+            for query, error_type, message in AMBIGUOUS_TEMPLATES:
+                examples.append(NegativeExample(
+                    user_query=query,
+                    error_type=error_type,
+                    error_message=message,
+                ))
+
+                # Version minuscule pour les requêtes courtes
+                if len(query) < 20 and random.random() < 0.5:
+                    examples.append(NegativeExample(
+                        user_query=query.lower(),
+                        error_type=error_type,
+                        error_message=message,
+                    ))
+
+        random.shuffle(examples)
+        return examples
+
     def generate_all(self) -> list[MultiTurnExample]:
         """Génère tous les exemples d'entraînement."""
         print("Génération du dataset multi-turn...")
 
         all_examples = []
 
-        domains = ["light", "switch", "climate", "cover", "lock", "scene", "fan"]
+        domains = ["light", "switch", "climate", "cover", "lock", "scene", "fan", "person"]
 
         for domain in tqdm(domains, desc="Domaines"):
             examples = self._generate_domain_examples(domain)
@@ -435,7 +800,14 @@ class DatasetGenerator:
         random.shuffle(all_examples)
 
         self.examples = all_examples
-        print(f"\nTotal: {len(all_examples)} exemples générés")
+        print(f"\nTotal exemples positifs: {len(all_examples)}")
+
+        # Générer les exemples négatifs
+        print("\nGénération des exemples négatifs...")
+        self.negative_examples = self._generate_negative_examples()
+        print(f"Total exemples négatifs: {len(self.negative_examples)}")
+
+        print(f"\nTotal général: {len(all_examples) + len(self.negative_examples)} exemples")
 
         return all_examples
 
@@ -443,10 +815,15 @@ class DatasetGenerator:
         """Sauvegarde le dataset au format JSON Lines."""
         os.makedirs(output_dir, exist_ok=True)
 
-        # Split train/val
+        # Split train/val pour les exemples positifs
         n_val = int(len(self.examples) * val_split)
         val_examples = self.examples[:n_val]
         train_examples = self.examples[n_val:]
+
+        # Split train/val pour les exemples négatifs
+        n_neg_val = int(len(self.negative_examples) * val_split)
+        neg_val_examples = self.negative_examples[:n_neg_val]
+        neg_train_examples = self.negative_examples[n_neg_val:]
 
         # Sauvegarder
         train_path = os.path.join(output_dir, "train.jsonl")
@@ -456,6 +833,7 @@ class DatasetGenerator:
         val_count = 0
 
         with open(train_path, "w", encoding="utf-8") as f:
+            # Exemples positifs
             for example in train_examples:
                 # Format multi-turn (get_entities → action)
                 data = example.to_training_format()
@@ -468,7 +846,19 @@ class DatasetGenerator:
                     f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
                     train_count += 1
 
+                # Format single-turn (sans get_entities, direct)
+                data_single = example.to_single_turn_format()
+                f.write(json.dumps(data_single, ensure_ascii=False) + "\n")
+                train_count += 1
+
+            # Exemples négatifs
+            for neg_example in neg_train_examples:
+                data = neg_example.to_training_format()
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                train_count += 1
+
         with open(val_path, "w", encoding="utf-8") as f:
+            # Exemples positifs
             for example in val_examples:
                 # Format multi-turn
                 data = example.to_training_format()
@@ -481,20 +871,32 @@ class DatasetGenerator:
                     f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
                     val_count += 1
 
+                # Format single-turn
+                data_single = example.to_single_turn_format()
+                f.write(json.dumps(data_single, ensure_ascii=False) + "\n")
+                val_count += 1
+
+            # Exemples négatifs
+            for neg_example in neg_val_examples:
+                data = neg_example.to_training_format()
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                val_count += 1
+
         print(f"Dataset sauvegardé:")
         print(f"  Train: {train_path} ({train_count} exemples)")
         print(f"  Val: {val_path} ({val_count} exemples)")
-        if include_one_step:
-            print(f"  (inclut multi-turn ET one-step pour chaque exemple)")
+        print(f"  (inclut: multi-turn, one-step, single-turn, et négatifs)")
 
         # Afficher des exemples
         if train_examples:
-            print(f"\nExemple multi-turn:")
-            sample = train_examples[0].to_training_format()
+            print(f"\nExemple positif (single-turn):")
+            sample = train_examples[0].to_single_turn_format()
             print(sample["text"])
-            print(f"\nExemple one-step:")
-            sample_one = train_examples[0].to_one_step_format()
-            print(sample_one["text"])
+
+        if neg_train_examples:
+            print(f"\nExemple négatif:")
+            sample_neg = neg_train_examples[0].to_training_format()
+            print(sample_neg["text"])
 
 
 async def main():
