@@ -23,3 +23,7 @@ wandb/
 logs/
 llama.cpp/
 functiongemma-ha-merged/Functiongemma-Ha-Merged-268M-F16.gguf
+
+# Node.js / React webapp
+webapp/node_modules/
+webapp/dist/

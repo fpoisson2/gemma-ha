@@ -1,0 +1,276 @@
+.dataset-cleaner {
+  min-height: 100vh;
+  background: #11111b;
+  color: #cdd6f4;
+}
+
+.header {
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(135deg, #1e1e2e 0%, #181825 100%);
+  border-bottom: 1px solid #313244;
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  margin: 0 0 0.5rem;
+  background: linear-gradient(135deg, #89b4fa, #cba6f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header p {
+  color: #a6adc8;
+  margin: 0;
+}
+
+/* Upload Section */
+.upload-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+  min-height: 300px;
+  border: 3px dashed #45475a;
+  border-radius: 16px;
+  background: #1e1e2e;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-area:hover {
+  border-color: #89b4fa;
+  background: #181825;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.upload-icon {
+  font-size: 4rem;
+}
+
+.upload-text {
+  font-size: 1.2rem;
+  color: #cdd6f4;
+}
+
+.upload-hint {
+  font-size: 0.9rem;
+  color: #6c7086;
+}
+
+/* Stats Bar */
+.stats-bar {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background: #1e1e2e;
+  border-bottom: 1px solid #313244;
+  overflow-x: auto;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #cdd6f4;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6c7086;
+  text-transform: uppercase;
+}
+
+.stat-pending .stat-value {
+  color: #fab387;
+}
+
+.stat-approved .stat-value {
+  color: #a6e3a1;
+}
+
+.stat-rejected .stat-value {
+  color: #f38ba8;
+}
+
+.stat-progress {
+  flex: 1;
+  min-width: 200px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #313244;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 0.5rem;
+}
+
+.progress-approved {
+  background: #a6e3a1;
+  transition: width 0.3s ease;
+}
+
+.progress-rejected {
+  background: #f38ba8;
+  transition: width 0.3s ease;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  background: #181825;
+  border-bottom: 1px solid #313244;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.filter-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #45475a;
+  border-radius: 8px;
+  background: transparent;
+  color: #a6adc8;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  border-color: #89b4fa;
+  color: #89b4fa;
+}
+
+.filter-btn.active {
+  background: #89b4fa;
+  border-color: #89b4fa;
+  color: #1e1e2e;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: 1px solid #45475a;
+  border-radius: 8px;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-size: 0.9rem;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #89b4fa;
+}
+
+.action-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn.approve-all {
+  background: #a6e3a1;
+  color: #1e1e2e;
+}
+
+.action-btn.approve-all:hover {
+  background: #94e2d5;
+}
+
+.action-btn.export-btn {
+  background: #45475a;
+  color: #cdd6f4;
+}
+
+.action-btn.export-btn:hover {
+  background: #585b70;
+}
+
+/* Examples List */
+.examples-list {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #6c7086;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .filter-group {
+    flex-wrap: wrap;
+  }
+
+  .stats-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .examples-list {
+    padding: 1rem;
+  }
+}
