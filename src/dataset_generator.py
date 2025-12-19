@@ -17,6 +17,81 @@ import yaml
 from tqdm import tqdm
 
 
+# ============================================================================
+# FILTRAGE DES ENTITÉS - Garder uniquement les entités utiles
+# ============================================================================
+
+# Domaines utiles pour la domotique vocale
+USEFUL_DOMAINS = ['light', 'switch', 'climate', 'scene', 'cover', 'fan', 'lock', 'person']
+
+# Patterns à exclure (entités système, diagnostics, etc.)
+ENTITY_EXCLUSIONS = [
+    # Updates et OTA
+    '_update', '_auto_update', '_ota', '_prerelease', '_firmware',
+    # Devices ESPHome/ESP internes
+    'espresense_', 'esphome_', '_esp_', '_esphome',
+    # AdGuard et autres services
+    'adguard_', 'hacs_', 'supervisor_',
+    # Diagnostics et capteurs système
+    '_battery', '_signal', '_linkquality', '_rssi', '_voltage',
+    '_power_on_behavior', '_do_not_disturb', '_led_',
+    # Autres patterns système
+    '_restart', '_identify', '_debug', '_test',
+    '_unavailable', '_unknown',
+]
+
+
+def filter_entities(entities: list[dict]) -> list[dict]:
+    """
+    Filtre les entités pour ne garder que celles utiles à l'entraînement.
+
+    Args:
+        entities: Liste des entités depuis Home Assistant
+
+    Returns:
+        Liste filtrée des entités utiles
+    """
+    filtered = []
+
+    for entity in entities:
+        entity_id = entity.get("entity_id", "").lower()
+
+        # Extraire le domaine
+        if "." not in entity_id:
+            continue
+        domain = entity_id.split(".")[0]
+
+        # Vérifier si le domaine est utile
+        if domain not in USEFUL_DOMAINS:
+            continue
+
+        # Vérifier les exclusions
+        if any(excl in entity_id for excl in ENTITY_EXCLUSIONS):
+            continue
+
+        filtered.append(entity)
+
+    return filtered
+
+
+def print_entity_summary(entities: list[dict], filtered: list[dict]) -> None:
+    """Affiche un résumé du filtrage des entités."""
+    print(f"\n📊 Filtrage des entités:")
+    print(f"  Avant: {len(entities)} entités")
+    print(f"  Après: {len(filtered)} entités")
+    print(f"  Exclues: {len(entities) - len(filtered)}")
+
+    # Compter par domaine
+    domain_counts = {}
+    for entity in filtered:
+        domain = entity.get("entity_id", "").split(".")[0]
+        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+
+    print(f"\n  Par domaine:")
+    for domain in sorted(domain_counts.keys()):
+        print(f"    {domain}: {domain_counts[domain]}")
+
+
 # Variations de texte pour robustesse aux fautes de frappe
 def add_typos(text: str, probability: float = 0.3) -> str:
     """Ajoute des fautes de frappe réalistes au texte."""
@@ -1402,9 +1477,11 @@ async def main():
 
     print("Récupération des données de Home Assistant...")
     await client.build_function_schemas()
-    entities = client.entities
+    raw_entities = client.entities
 
-    print(f"  Entités: {len(entities)}")
+    # Filtrer les entités pour ne garder que celles utiles
+    entities = filter_entities(raw_entities)
+    print_entity_summary(raw_entities, entities)
 
     # Générer le dataset
     generator = DatasetGenerator(
