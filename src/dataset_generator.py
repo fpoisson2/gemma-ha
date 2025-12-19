@@ -1,10 +1,11 @@
 """
 Générateur de dataset pour fine-tuner FunctionGemma sur Home Assistant.
-Génère des exemples multi-turn avec pattern get_entities -> action.
+Format one-step: toutes les entités dans le prompt → action directe.
 
 Le modèle apprend à:
-1. D'abord récupérer les entités disponibles (get_entities)
-2. Puis appeler la fonction appropriée avec la bonne entité
+1. Recevoir une requête utilisateur + liste de TOUTES les entités disponibles
+2. Appeler directement l'action appropriée avec la bonne entité
+3. Retourner une erreur si l'entité demandée n'existe pas dans la liste
 """
 
 import os
@@ -1041,11 +1042,34 @@ class NegativeExample:
     user_query: str
     error_type: str  # "entity_not_found", "clarification_needed", "out_of_scope"
     error_message: str
+    all_entities_by_domain: dict = field(default_factory=dict)  # Toutes les entités par domaine
+
+    def _build_all_entities_context(self) -> str:
+        """Construit le contexte avec TOUTES les entités (comme en production)."""
+        if not self.all_entities_by_domain:
+            return ""
+
+        # Format identique à MultiTurnExample et chat.py
+        parts = []
+        for domain in USEFUL_DOMAINS:
+            entities = self.all_entities_by_domain.get(domain, [])
+            if entities:
+                entities_str = ", ".join(entities)
+                parts.append(f"Entités {domain} disponibles: {entities_str}")
+        return "\n".join(parts) if parts else ""
 
     def to_training_format(self) -> dict:
         """
         Convertit en format d'entraînement avec appel de fonction erreur.
+        IMPORTANT: Inclut les entités dans le prompt (même format que les positifs).
         """
+        # Construire le contexte des entités (comme les exemples positifs)
+        entities_context = self._build_all_entities_context()
+        if entities_context:
+            user_prompt = f"{self.user_query}\n\n{entities_context}"
+        else:
+            user_prompt = self.user_query
+
         # Appel de fonction erreur
         error_call = format_function_call(
             f"error.{self.error_type}",
@@ -1054,7 +1078,7 @@ class NegativeExample:
 
         # Format texte pour l'entraînement
         text = (
-            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+            f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
             f"<start_of_turn>model\n{error_call}<end_of_turn>"
         )
 
@@ -1342,11 +1366,12 @@ class DatasetGenerator:
         for _ in range(self.negative_examples_multiplier):
             # Entités non trouvées
             for query, error_type, message in NEGATIVE_TEMPLATES:
-                # Version normale
+                # Version normale - AVEC les entités disponibles (format identique aux positifs)
                 examples.append(NegativeExample(
                     user_query=query,
                     error_type=error_type,
                     error_message=message,
+                    all_entities_by_domain=self.all_entity_ids_by_domain,
                 ))
 
                 # Version avec fautes de frappe (50% du temps)
@@ -1357,6 +1382,7 @@ class DatasetGenerator:
                             user_query=typo_query,
                             error_type=error_type,
                             error_message=message,
+                            all_entities_by_domain=self.all_entity_ids_by_domain,
                         ))
 
             # Requêtes ambiguës/incomplètes
@@ -1365,6 +1391,7 @@ class DatasetGenerator:
                     user_query=query,
                     error_type=error_type,
                     error_message=message,
+                    all_entities_by_domain=self.all_entity_ids_by_domain,
                 ))
 
                 # Version minuscule pour les requêtes courtes
@@ -1373,6 +1400,7 @@ class DatasetGenerator:
                         user_query=query.lower(),
                         error_type=error_type,
                         error_message=message,
+                        all_entities_by_domain=self.all_entity_ids_by_domain,
                     ))
 
         random.shuffle(examples)
