@@ -215,10 +215,74 @@ class GemmaHAChat:
         entities_str = ", ".join(entities[:10])
         return f"Entités {domain} disponibles: {entities_str}"
 
+    async def get_entity_state(self, entity_id: str) -> str:
+        """
+        Récupère l'état d'une entité Home Assistant via GET /api/states/{entity_id}.
+        C'est le handler pour le tool MCP ha_get_state.
+        """
+        if not self.ha_client:
+            return f"[Simulation] État de {entity_id}: unknown"
+
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.ha_client.url}/api/states/{entity_id}"
+                async with session.get(
+                    url,
+                    headers=self.ha_client._headers(),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        state = data.get("state", "unknown")
+                        attrs = data.get("attributes", {})
+
+                        # Formater une réponse lisible selon le domaine
+                        domain = entity_id.split(".")[0] if "." in entity_id else ""
+
+                        if domain == "person":
+                            location = attrs.get("friendly_name", entity_id.split(".")[-1])
+                            return f"{location} est {state}"
+                        elif domain == "light":
+                            if state == "on":
+                                brightness = attrs.get("brightness", 255)
+                                pct = int(brightness / 255 * 100)
+                                return f"Lumière allumée ({pct}%)"
+                            else:
+                                return "Lumière éteinte"
+                        elif domain == "climate":
+                            current_temp = attrs.get("current_temperature", "?")
+                            target_temp = attrs.get("temperature", "?")
+                            mode = attrs.get("hvac_mode", state)
+                            return f"Température: {current_temp}°C (cible: {target_temp}°C, mode: {mode})"
+                        elif domain == "cover":
+                            position = attrs.get("current_position", "?")
+                            return f"Volet {state} (position: {position}%)"
+                        elif domain == "lock":
+                            return f"Serrure {state}"
+                        elif domain == "switch":
+                            return f"Interrupteur {state}"
+                        else:
+                            return f"{entity_id}: {state}"
+                    elif resp.status == 404:
+                        return f"Entité {entity_id} non trouvée"
+                    else:
+                        text = await resp.text()
+                        return f"Erreur {resp.status}: {text}"
+        except Exception as e:
+            return f"Erreur: {e}"
+
     async def call_ha_service(self, func_name: str, params: dict) -> str:
         """Appelle un service Home Assistant."""
         if not self.ha_client:
             return f"[Simulation] {func_name}({params})"
+
+        # Handler spécial pour ha_get_state (tool MCP)
+        if func_name == "ha_get_state":
+            entity_id = params.get("entity_id", "")
+            if not entity_id:
+                return "Erreur: entity_id requis pour ha_get_state"
+            return await self.get_entity_state(entity_id)
 
         # Parser domain.service
         if "." not in func_name:

@@ -749,10 +749,18 @@ class MultiTurnExample:
         # Appel de l'action finale
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
-        action_call = format_function_call(
-            f"{self.domain}.{self.action}",
-            action_params
-        )
+
+        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        if self.action == "get_state":
+            action_call = format_function_call(
+                "ha_get_state",
+                {"entity_id": self.target_entity}
+            )
+        else:
+            action_call = format_function_call(
+                f"{self.domain}.{self.action}",
+                action_params
+            )
 
         # Format texte pour l'entraînement
         text = (
@@ -775,10 +783,18 @@ class MultiTurnExample:
         # Appel de l'action directe
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
-        action_call = format_function_call(
-            f"{self.domain}.{self.action}",
-            action_params
-        )
+
+        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        if self.action == "get_state":
+            action_call = format_function_call(
+                "ha_get_state",
+                {"entity_id": self.target_entity}
+            )
+        else:
+            action_call = format_function_call(
+                f"{self.domain}.{self.action}",
+                action_params
+            )
 
         # Format texte pour l'entraînement
         text = (
@@ -803,10 +819,18 @@ class MultiTurnExample:
         # Appel de l'action directe
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
-        action_call = format_function_call(
-            f"{self.domain}.{self.action}",
-            action_params
-        )
+
+        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        if self.action == "get_state":
+            action_call = format_function_call(
+                "ha_get_state",
+                {"entity_id": self.target_entity}
+            )
+        else:
+            action_call = format_function_call(
+                f"{self.domain}.{self.action}",
+                action_params
+            )
 
         # Format texte pour l'entraînement
         text = (
