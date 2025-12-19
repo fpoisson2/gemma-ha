@@ -5,6 +5,11 @@ Génère des exemples multi-turn avec pattern get_entities -> action.
 Le modèle apprend à:
 1. D'abord récupérer les entités disponibles (get_entities)
 2. Puis appeler la fonction appropriée avec la bonne entité
+
+IMPORTANT - Règles de qualité du dataset:
+- Filtrer les entités techniques/système (zigbee, gpio, bridge, etc.)
+- Exiger une location spécifique pour éviter l'ambiguïté
+- Valider la correspondance entre l'action et l'entité cible
 """
 
 import os
@@ -15,6 +20,101 @@ from dataclasses import dataclass, field
 
 import yaml
 from tqdm import tqdm
+
+
+# =============================================================================
+# FILTRAGE DES ENTITÉS TECHNIQUES/SYSTÈME
+# =============================================================================
+
+# Patterns d'entités à EXCLURE du dataset (entités techniques, système, debug)
+EXCLUDED_ENTITY_PATTERNS = [
+    # Zigbee/Z-Wave/réseau
+    "zigbee2mqtt",
+    "bridge",
+    "permit_join",
+    "coordinator",
+    "z2m_",
+    "zha_",
+    # Hardware/GPIO
+    "gpio",
+    "slzb",
+    "esp32",
+    "esp8266",
+    "tasmota",
+    "sonoff_",
+    # Système/Debug
+    "disable_leds",
+    "enable_outdoor_temperature",
+    "debug",
+    "test_",
+    "_test",
+    "dummy",
+    # Réseau/IP
+    "192_168_",
+    "10_0_",
+    "172_16_",
+    "autoriser_les_appels",
+    # Technique spécifique
+    "relais_distant",
+    "affichage",  # Sous-fonction d'un appareil
+    "purificateur",  # Sous-fonction d'un appareil
+    "updater",
+    "update",
+    # Intégrations système
+    "hacs",
+    "supervisor",
+    "core_",
+    "addon_",
+]
+
+# Friendly names à exclure aussi
+EXCLUDED_FRIENDLY_NAME_PATTERNS = [
+    "Zigbee",
+    "Bridge",
+    "GPIO",
+    "SLZB",
+    "Permit Join",
+    "Disable LED",
+    "Enable Outdoor",
+    "Coordinator",
+    "Debug",
+    "Test ",
+]
+
+
+def is_technical_entity(entity: dict) -> bool:
+    """
+    Vérifie si une entité est technique/système et doit être exclue du dataset.
+
+    Args:
+        entity: Dictionnaire avec 'entity_id' et optionnellement 'attributes.friendly_name'
+
+    Returns:
+        True si l'entité doit être exclue
+    """
+    entity_id = entity.get("entity_id", "").lower()
+    friendly_name = entity.get("attributes", {}).get("friendly_name", "").lower()
+
+    # Vérifier les patterns dans l'entity_id
+    for pattern in EXCLUDED_ENTITY_PATTERNS:
+        if pattern.lower() in entity_id:
+            return True
+
+    # Vérifier les patterns dans le friendly_name
+    for pattern in EXCLUDED_FRIENDLY_NAME_PATTERNS:
+        if pattern.lower() in friendly_name:
+            return True
+
+    return False
+
+
+def filter_entities(entities: list[dict]) -> list[dict]:
+    """Filtre les entités techniques du dataset."""
+    filtered = [e for e in entities if not is_technical_entity(e)]
+    excluded_count = len(entities) - len(filtered)
+    if excluded_count > 0:
+        print(f"  → {excluded_count} entités techniques exclues")
+    return filtered
 
 
 # Variations de texte pour robustesse aux fautes de frappe
@@ -270,105 +370,84 @@ TEMPLATES_FR = {
         ],
     },
     "climate": {
+        # IMPORTANT: Tous les templates climate DOIVENT avoir {location} pour éviter l'ambiguïté
+        # Les templates sans location sont déplacés vers VAGUE_CLIMATE_TEMPLATES pour générer des clarifications
         "set_temperature": [
-            "Mets le chauffage à {temperature} degrés",
-            "Règle la température à {temperature}°C",
-            "Je veux {temperature} degrés",
-            "Température à {temperature} degrés",
-            "Chauffe à {temperature}°C",
-            "Monte le chauffage à {temperature}",
-            "Baisse la température à {temperature}",
-            "Met {temperature} degrés",
-            "{temperature} degrés s'il te plaît",
-            "Thermostat à {temperature}",
-            "Chauffage à {temperature}",
-            "Set temperature to {temperature}",
-            "Met le à {temperature}",
-            "Monte à {temperature}",
-            "Descend à {temperature}",
-            # Nouvelles variations
-            "Je veux qu'il fasse {temperature} degrés",
-            "Augmente à {temperature}",
-            "Diminue à {temperature}",
-            "Règle à {temperature}",
-            "{temperature}° dans la maison",
-            "Chauffe la maison à {temperature}",
-            "Refroidis à {temperature} degrés",
-            "Mets-moi {temperature} degrés",
-            "On met {temperature}",
-            "Change la température à {temperature}",
-            "Ajuste le thermostat à {temperature}",
-            "Configure {temperature} degrés",
+            # Templates AVEC location (spécifiques)
+            "Mets le chauffage {location} à {temperature} degrés",
+            "Règle la température {location} à {temperature}°C",
+            "Je veux {temperature} degrés {location}",
+            "Température {location} à {temperature} degrés",
+            "Chauffe {location} à {temperature}°C",
+            "Monte le chauffage {location} à {temperature}",
+            "Baisse la température {location} à {temperature}",
+            "Met {temperature} degrés {location}",
+            "{temperature} degrés {location} s'il te plaît",
+            "Thermostat {location} à {temperature}",
+            "Chauffage {location} à {temperature}",
+            "Met le thermostat {location} à {temperature}",
+            "Règle {location} à {temperature}",
+            "{temperature}° {location}",
+            "Mets-moi {temperature} degrés {location}",
+            "On met {temperature} {location}",
+            "Change la température {location} à {temperature}",
+            "Ajuste le thermostat {location} à {temperature}",
+            "Configure {temperature} degrés {location}",
         ],
         "set_hvac_mode": [
-            "Mets le thermostat en mode {mode}",
-            "Passe en mode {mode}",
-            "Active le mode {mode}",
-            "Mode {mode}",
-            "Met en {mode}",
-            # Nouvelles variations
-            "Change le mode en {mode}",
-            "Bascule en {mode}",
-            "Je veux le mode {mode}",
-            "Thermostat en {mode}",
-            "Passe le chauffage en {mode}",
+            # Templates AVEC location
+            "Mets le thermostat {location} en mode {mode}",
+            "Passe {location} en mode {mode}",
+            "Active le mode {mode} {location}",
+            "Mode {mode} {location}",
+            "Met {location} en {mode}",
+            "Change le mode {location} en {mode}",
+            "Thermostat {location} en {mode}",
+            "Passe le chauffage {location} en {mode}",
         ],
         "turn_on": [
-            "Allume le chauffage",
-            "Démarre la climatisation",
-            "Active le thermostat",
-            "Ouvre le chauffage",
-            "Part le chauffage",
-            "Démarre le chauffage",
-            "Met le chauffage",
-            "Allume la clim",
-            "Ouvre la clim",
-            # Nouvelles variations
-            "Lance le chauffage",
-            "J'ai froid",
-            "J'ai chaud",
-            "Chauffe",
-            "Refroidis",
-            "Active la climatisation",
-            "Mets la clim",
-            "Je gèle",
-            "On crève de chaud",
+            # Templates AVEC location (spécifiques)
+            "Allume le chauffage {location}",
+            "Démarre la climatisation {location}",
+            "Active le thermostat {location}",
+            "Ouvre le chauffage {location}",
+            "Démarre le chauffage {location}",
+            "Met le chauffage {location}",
+            "Allume la clim {location}",
+            "Lance le chauffage {location}",
+            "J'ai froid {location}",
+            "Chauffe {location}",
+            "Refroidis {location}",
+            "Active la climatisation {location}",
+            "Mets la clim {location}",
         ],
         "turn_off": [
-            "Éteins le chauffage",
-            "Arrête la climatisation",
-            "Coupe le chauffage",
-            "Ferme le chauffage",
-            "Éteins la clim",
-            "Ferme la clim",
-            "Arrête le thermostat",
-            "Coupe la clim",
-            # Nouvelles variations
-            "Stop le chauffage",
-            "Désactive le thermostat",
-            "Plus de chauffage",
-            "Arrête de chauffer",
-            "Arrête de refroidir",
-            "Coupe le thermostat",
+            # Templates AVEC location (spécifiques)
+            "Éteins le chauffage {location}",
+            "Arrête la climatisation {location}",
+            "Coupe le chauffage {location}",
+            "Ferme le chauffage {location}",
+            "Éteins la clim {location}",
+            "Arrête le thermostat {location}",
+            "Coupe la clim {location}",
+            "Stop le chauffage {location}",
+            "Désactive le thermostat {location}",
+            "Plus de chauffage {location}",
+            "Coupe le thermostat {location}",
         ],
         "get_state": [
             "Quelle est la température {location} ?",
             "Il fait combien {location} ?",
             "Quelle température fait-il {location} ?",
-            "Le chauffage est allumé ?",
-            "Quel est le mode du thermostat ?",
+            "Le chauffage {location} est allumé ?",
+            "Quel est le mode du thermostat {location} ?",
             "C'est à combien {location} ?",
             "Il fait chaud {location} ?",
             "Il fait froid {location} ?",
             "Température {location} ?",
-            "What's the temperature?",
-            # Nouvelles variations
             "Combien de degrés {location} ?",
-            "La température actuelle ?",
-            "Quel temps fait-il à l'intérieur ?",
-            "Statut du chauffage",
-            "Le thermostat est à combien ?",
-            "État de la climatisation",
+            "Statut du chauffage {location}",
+            "Le thermostat {location} est à combien ?",
         ],
     },
     "cover": {
@@ -568,8 +647,8 @@ AMBIGUOUS_TEMPLATES = [
     ("Éteins tout", "clarification_needed", "Précisez quelles lumières vous voulez éteindre"),
     ("Ouvre", "clarification_needed", "Précisez ce que vous voulez ouvrir"),
     ("Ferme", "clarification_needed", "Précisez ce que vous voulez fermer"),
-    ("Mets le chauffage", "clarification_needed", "Précisez la température souhaitée"),
-    ("Monte le chauffage", "clarification_needed", "Précisez la température souhaitée"),
+    ("Mets le chauffage", "clarification_needed", "Précisez la pièce et la température souhaitée"),
+    ("Monte le chauffage", "clarification_needed", "Précisez la pièce et la température souhaitée"),
     ("Baisse", "clarification_needed", "Précisez ce que vous voulez baisser"),
     ("Active", "clarification_needed", "Précisez ce que vous voulez activer"),
     ("Démarre", "clarification_needed", "Précisez ce que vous voulez démarrer"),
@@ -577,6 +656,42 @@ AMBIGUOUS_TEMPLATES = [
     ("Règle", "clarification_needed", "Précisez ce que vous voulez régler"),
     ("Met", "clarification_needed", "Précisez ce que vous voulez mettre"),
     ("Stop", "clarification_needed", "Précisez ce que vous voulez arrêter"),
+
+    # CLIMATE: Requêtes sans location spécifique (AMBIGUËS)
+    # Ces templates doivent demander une clarification car il y a plusieurs thermostats
+    ("Allume le chauffage", "clarification_needed", "Précisez dans quelle pièce (salon, chambre, cuisine, etc.)"),
+    ("Éteins le chauffage", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Démarre la climatisation", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Arrête la climatisation", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Active le thermostat", "clarification_needed", "Précisez quel thermostat (salon, chambre, bureau, etc.)"),
+    ("Coupe le thermostat", "clarification_needed", "Précisez quel thermostat"),
+    ("Plus de chauffage", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Coupe la clim", "clarification_needed", "Précisez dans quelle pièce"),
+    ("J'ai froid", "clarification_needed", "Précisez dans quelle pièce vous voulez chauffer"),
+    ("J'ai chaud", "clarification_needed", "Précisez dans quelle pièce vous voulez refroidir"),
+    ("Mets le chauffage à 20", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Mets le chauffage à 21", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Mets le chauffage à 22", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Monte le chauffage à 23", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Baisse le chauffage à 18", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Change la température à 20", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Ajuste le thermostat à 21", "clarification_needed", "Précisez quel thermostat"),
+    ("Passe en mode chauffage", "clarification_needed", "Précisez pour quel thermostat"),
+    ("Passe en mode climatisation", "clarification_needed", "Précisez pour quel thermostat"),
+    ("Mode éco", "clarification_needed", "Précisez pour quel thermostat"),
+    ("Thermostat à 20", "clarification_needed", "Précisez quel thermostat"),
+    ("20 degrés", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Règle à 21", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Chauffe", "clarification_needed", "Précisez quelle pièce chauffer"),
+    ("Refroidis", "clarification_needed", "Précisez quelle pièce refroidir"),
+    ("Je gèle", "clarification_needed", "Précisez dans quelle pièce vous voulez chauffer"),
+    ("On crève de chaud", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Quelle est la température ?", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Il fait combien ?", "clarification_needed", "Précisez dans quelle pièce"),
+    ("La température actuelle ?", "clarification_needed", "Précisez dans quelle pièce"),
+    ("Statut du chauffage", "clarification_needed", "Précisez quel thermostat"),
+    ("Le thermostat est à combien ?", "clarification_needed", "Précisez quel thermostat"),
+    ("État de la climatisation", "clarification_needed", "Précisez quel climatiseur"),
     # Requêtes incomplètes coupées
     ("Allume la", "clarification_needed", "Requête incomplète"),
     ("Éteins le", "clarification_needed", "Requête incomplète"),
@@ -721,10 +836,11 @@ class MultiTurnExample:
     """Un exemple d'entraînement multi-turn."""
     user_query: str
     domain: str
-    available_entities: list[str]  # Liste des entity_ids disponibles
+    available_entities: list[str]  # Liste des entity_ids disponibles pour ce domaine
     target_entity: str  # L'entité choisie
     action: str  # ex: "turn_on", "set_temperature"
     action_params: dict  # Paramètres additionnels (brightness, temperature, etc.)
+    all_entities_by_domain: dict = field(default_factory=dict)  # Toutes les entités par domaine pour one-step
 
     def _format_state_response(self) -> str:
         """Génère une réponse d'état simulée pour l'entraînement."""
@@ -845,12 +961,29 @@ class MultiTurnExample:
         Convertit en format d'entraînement one-step.
 
         Pattern simplifié:
-        1. User demande une action + liste des entités disponibles
+        1. User demande une action + liste des entités disponibles (TOUS les domaines)
         2. Model appelle directement l'action avec la bonne entité
+
+        Ce format inclut TOUTES les entités de tous les domaines pour forcer le modèle
+        à choisir la bonne entité parmi toutes les options disponibles.
         """
-        # Liste des entités disponibles dans le prompt
-        entities_list = ", ".join(self.available_entities[:10])
-        user_prompt = f"{self.user_query}\n\nEntités {self.domain} disponibles: {entities_list}"
+        # Construire la liste de toutes les entités par domaine
+        entities_sections = []
+        if self.all_entities_by_domain:
+            # Utiliser toutes les entités de tous les domaines
+            for domain in ["light", "switch", "climate", "scene", "person", "cover", "lock", "fan"]:
+                if domain in self.all_entities_by_domain:
+                    domain_entities = self.all_entities_by_domain[domain][:12]  # Limiter à 12 par domaine
+                    if domain_entities:
+                        entities_list = ", ".join(domain_entities)
+                        entities_sections.append(f"Entités {domain} disponibles: {entities_list}")
+        else:
+            # Fallback: utiliser seulement les entités du domaine actuel
+            entities_list = ", ".join(self.available_entities[:10])
+            entities_sections.append(f"Entités {self.domain} disponibles: {entities_list}")
+
+        entities_block = "\n".join(entities_sections)
+        user_prompt = f"{self.user_query}\n\n{entities_block}"
 
         # Appel de l'action directe
         action_params = {"entity_id": self.target_entity}
@@ -913,9 +1046,9 @@ class DatasetGenerator:
         examples_per_action: int = 20,
         examples_per_domain: int = 100,  # Limite par domaine pour équilibrer
         negative_examples_multiplier: int = 3,  # Multiplier pour générer plus de négatifs
-        seed: int = 42
+        seed: int = 42,
+        filter_technical: bool = True,  # Filtrer les entités techniques
     ):
-        self.entities = entities
         self.examples_per_action = examples_per_action
         self.examples_per_domain = examples_per_domain
         self.negative_examples_multiplier = negative_examples_multiplier
@@ -923,6 +1056,13 @@ class DatasetGenerator:
         self.negative_examples: list[NegativeExample] = []
 
         random.seed(seed)
+
+        # Filtrer les entités techniques si demandé
+        if filter_technical:
+            print("Filtrage des entités techniques...")
+            entities = filter_entities(entities)
+
+        self.entities = entities
 
         # Indexer les entités par domaine
         self.entities_by_domain: dict[str, list[dict]] = {}
@@ -933,6 +1073,11 @@ class DatasetGenerator:
                 if domain not in self.entities_by_domain:
                     self.entities_by_domain[domain] = []
                 self.entities_by_domain[domain].append(entity)
+
+        # Afficher le résumé par domaine
+        print("Entités par domaine:")
+        for domain, domain_entities in sorted(self.entities_by_domain.items()):
+            print(f"  {domain}: {len(domain_entities)}")
 
     def _get_entity_name(self, entity: dict) -> str:
         """Extrait un nom lisible pour une entité."""
@@ -946,6 +1091,13 @@ class DatasetGenerator:
         """Retourne la liste des entity_ids pour un domaine."""
         return [e["entity_id"] for e in self.entities_by_domain.get(domain, [])]
 
+    def _get_all_entity_ids_by_domain(self) -> dict[str, list[str]]:
+        """Retourne un dictionnaire de tous les entity_ids par domaine."""
+        return {
+            domain: [e["entity_id"] for e in entities]
+            for domain, entities in self.entities_by_domain.items()
+        }
+
     def _generate_domain_examples(self, domain: str) -> list[MultiTurnExample]:
         """Génère des exemples pour un domaine (limité pour équilibrage)."""
         examples = []
@@ -956,6 +1108,9 @@ class DatasetGenerator:
 
         templates = TEMPLATES_FR.get(domain, {})
         available_entity_ids = self._get_entity_ids(domain)
+
+        # Récupérer toutes les entités de tous les domaines pour le format one-step
+        all_entities_by_domain = self._get_all_entity_ids_by_domain()
 
         for action, action_templates in templates.items():
             # Pour chaque entité, générer plusieurs exemples avec différents templates
@@ -998,7 +1153,7 @@ class DatasetGenerator:
                         actual_action = action
                     elif "{mode}" in template:
                         mode_fr = random.choice(list(HVAC_MODES_FR.keys()))
-                        query = template.format(mode=mode_fr)
+                        query = template.format(mode=mode_fr, location=location)
                         action_params["hvac_mode"] = HVAC_MODES_FR[mode_fr]
                         actual_action = action
                     elif "{position}" in template:
@@ -1025,6 +1180,7 @@ class DatasetGenerator:
                         target_entity=entity_id,
                         action=actual_action,
                         action_params=action_params.copy(),
+                        all_entities_by_domain=all_entities_by_domain,
                     ))
 
                     # Version avec fautes de frappe (50% du temps)
@@ -1038,6 +1194,7 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=all_entities_by_domain,
                             ))
 
                     # Version avec préfixe de politesse (30% du temps)
@@ -1052,6 +1209,7 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=all_entities_by_domain,
                             ))
 
                     # Version avec suffixe contextuel (20% du temps)
@@ -1068,10 +1226,11 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=all_entities_by_domain,
                             ))
 
         # Générer des exemples de confusion (entités similaires)
-        confusion_examples = self._generate_confusion_examples(domain, available_entity_ids)
+        confusion_examples = self._generate_confusion_examples(domain, available_entity_ids, all_entities_by_domain)
         examples.extend(confusion_examples)
 
         # Mélanger et limiter pour équilibrer les domaines
@@ -1081,7 +1240,12 @@ class DatasetGenerator:
 
         return examples
 
-    def _generate_confusion_examples(self, domain: str, entity_ids: list[str]) -> list[MultiTurnExample]:
+    def _generate_confusion_examples(
+        self,
+        domain: str,
+        entity_ids: list[str],
+        all_entities_by_domain: dict[str, list[str]]
+    ) -> list[MultiTurnExample]:
         """
         Génère des exemples avec des entités similaires pour forcer le modèle à bien distinguer.
         Ex: "lumière du salon" vs "lumière de la salle à manger"
@@ -1161,6 +1325,7 @@ class DatasetGenerator:
                     target_entity=e1,  # La première est la cible
                     action=action,
                     action_params=action_params,
+                    all_entities_by_domain=all_entities_by_domain,
                 ))
 
         return examples
