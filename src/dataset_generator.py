@@ -657,9 +657,6 @@ AMBIGUOUS_TEMPLATES = [
     ("Met", "clarification_needed", "Précisez ce que vous voulez mettre"),
     ("Stop", "clarification_needed", "Précisez ce que vous voulez arrêter"),
 
-    # NOTE: Les requêtes climate vagues (sans location) ne sont PAS dans le dataset.
-    # Le modèle n'apprend simplement pas à y répondre - il ne fera rien.
-    # C'est le comportement voulu: pas de réponse = l'utilisateur doit reformuler.
     # Requêtes incomplètes coupées
     ("Allume la", "clarification_needed", "Requête incomplète"),
     ("Éteins le", "clarification_needed", "Requête incomplète"),
@@ -716,6 +713,100 @@ AMBIGUOUS_TEMPLATES = [
     ("Mets la lumière à 150%", "invalid_value", "Luminosité invalide. Plage acceptée: 0-100%"),
     ("Mets les volets à 200%", "invalid_value", "Position invalide. Plage acceptée: 0-100%"),
     ("Température à 0", "invalid_value", "Température invalide. Plage acceptée: 15-30°C"),
+]
+
+# =============================================================================
+# TEMPLATES SANS ACTION - Requêtes vagues où le modèle ne doit PAS agir
+# =============================================================================
+
+# Ces requêtes sont des commandes "valides" mais manquent de spécificité (pas de location).
+# Le modèle doit apprendre à NE RIEN FAIRE pour ces requêtes.
+# L'utilisateur devra reformuler avec une location précise.
+
+NO_ACTION_TEMPLATES = [
+    # ===== Climate sans location =====
+    "Allume le chauffage",
+    "Éteins le chauffage",
+    "Mets le chauffage",
+    "Démarre la climatisation",
+    "Arrête la climatisation",
+    "Allume la clim",
+    "Éteins la clim",
+    "Coupe le chauffage",
+    "Lance le chauffage",
+    "Active le thermostat",
+    "Désactive le thermostat",
+    "J'ai froid",
+    "J'ai chaud",
+    "Il fait froid",
+    "Il fait chaud",
+    "Monte le chauffage",
+    "Baisse le chauffage",
+    "Mets 20 degrés",
+    "Mets 22 degrés",
+    "Température à 21",
+    "Chauffage à 20",
+    "21 degrés s'il te plaît",
+    "Met le thermostat à 20",
+    "Règle la température à 22",
+    "Je veux 20 degrés",
+    "Passe en mode chauffage",
+    "Mode climatisation",
+    "Mode éco",
+    # Variations avec politesse
+    "S'il te plaît, allume le chauffage",
+    "Peux-tu allumer le chauffage ?",
+    "Tu peux mettre le chauffage ?",
+    "J'aimerais que tu allumes la clim",
+    "Est-ce que tu peux éteindre le chauffage ?",
+    "Merci de mettre le chauffage",
+    # Variations Québécoises
+    "Ouvre le chauffage",
+    "Ferme le chauffage",
+    "Ouvre la clim",
+    "Ferme la clim",
+    # ===== Lumières sans location spécifique =====
+    "Allume la lumière",
+    "Éteins la lumière",
+    "Allume les lumières",
+    "Éteins les lumières",
+    "Mets la lumière",
+    "Coupe la lumière",
+    "Lumière s'il te plaît",
+    "Plus de lumière",
+    "Pas de lumière",
+    "Je veux de la lumière",
+    "Éclaire",
+    "Fais de la lumière",
+    "Rallume",
+    "Light on",
+    "Light off",
+    # Québécois
+    "Ouvre la lumière",
+    "Ferme la lumière",
+    "Ouvre les lumières",
+    "Ferme les lumières",
+    # ===== Volets sans location =====
+    "Ouvre les volets",
+    "Ferme les volets",
+    "Ouvre les stores",
+    "Ferme les stores",
+    "Monte les volets",
+    "Baisse les volets",
+    "Lève les volets",
+    "Descends les volets",
+    "Volets ouverts",
+    "Volets fermés",
+    # ===== Ventilateur sans location =====
+    "Allume le ventilateur",
+    "Éteins le ventilateur",
+    "Mets le ventilo",
+    "Coupe le ventilo",
+    "Active la ventilation",
+    "Arrête la ventilation",
+    "Lance le ventilateur",
+    "J'ai besoin d'air",
+    "Fais de l'air",
 ]
 
 
@@ -1005,6 +1096,59 @@ class NegativeExample:
         return {"text": text}
 
 
+@dataclass
+class NoActionExample:
+    """
+    Un exemple où le modèle ne doit PAS exécuter de commande.
+
+    Pour les requêtes vagues ou ambiguës (comme "Allume le chauffage" sans location),
+    le modèle doit apprendre à ne rien faire - pas de function call.
+    L'utilisateur devra reformuler sa demande avec plus de précision.
+    """
+    user_query: str
+    available_entities: list[str] = field(default_factory=list)
+    all_entities_by_domain: dict = field(default_factory=dict)
+
+    def to_training_format(self) -> dict:
+        """
+        Convertit en format d'entraînement SANS appel de fonction.
+        Le modèle apprend à ne rien répondre pour ces requêtes.
+        """
+        # Format texte avec réponse vide du modèle
+        text = (
+            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+            f"<start_of_turn>model\n<end_of_turn>"
+        )
+        return {"text": text}
+
+    def to_one_step_format(self) -> dict:
+        """
+        Format one-step avec toutes les entités listées mais SANS action.
+
+        Même avec les entités disponibles, si la requête est vague,
+        le modèle doit apprendre à ne pas agir.
+        """
+        # Construire la liste de toutes les entités par domaine
+        entities_sections = []
+        if self.all_entities_by_domain:
+            for domain in ["light", "switch", "climate", "scene", "person", "cover", "lock", "fan"]:
+                if domain in self.all_entities_by_domain:
+                    domain_entities = self.all_entities_by_domain[domain][:12]
+                    if domain_entities:
+                        entities_list = ", ".join(domain_entities)
+                        entities_sections.append(f"Entités {domain} disponibles: {entities_list}")
+
+        entities_block = "\n".join(entities_sections)
+        user_prompt = f"{self.user_query}\n\n{entities_block}" if entities_block else self.user_query
+
+        # Pas de function call - réponse vide
+        text = (
+            f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
+            f"<start_of_turn>model\n<end_of_turn>"
+        )
+        return {"text": text}
+
+
 class DatasetGenerator:
     """Génère un dataset de fine-tuning multi-turn pour FunctionGemma."""
 
@@ -1022,6 +1166,7 @@ class DatasetGenerator:
         self.negative_examples_multiplier = negative_examples_multiplier
         self.examples: list[MultiTurnExample] = []
         self.negative_examples: list[NegativeExample] = []
+        self.no_action_examples: list[NoActionExample] = []
 
         random.seed(seed)
 
@@ -1342,6 +1487,44 @@ class DatasetGenerator:
         random.shuffle(examples)
         return examples
 
+    def _generate_no_action_examples(self) -> list[NoActionExample]:
+        """
+        Génère des exemples sans action pour les requêtes vagues.
+
+        Ces exemples enseignent au modèle à ne PAS exécuter de commande
+        quand la requête manque de spécificité (pas de location).
+        """
+        examples = []
+        all_entities_by_domain = self._get_all_entity_ids_by_domain()
+
+        # Générer plusieurs instances de chaque template
+        for _ in range(self.negative_examples_multiplier):
+            for query in NO_ACTION_TEMPLATES:
+                # Version normale
+                examples.append(NoActionExample(
+                    user_query=query,
+                    all_entities_by_domain=all_entities_by_domain,
+                ))
+
+                # Version avec fautes de frappe (50% du temps)
+                if random.random() < 0.5:
+                    typo_query = add_typos(query, probability=1.0)
+                    if typo_query != query:
+                        examples.append(NoActionExample(
+                            user_query=typo_query,
+                            all_entities_by_domain=all_entities_by_domain,
+                        ))
+
+                # Version minuscule (30% du temps)
+                if random.random() < 0.3:
+                    examples.append(NoActionExample(
+                        user_query=query.lower(),
+                        all_entities_by_domain=all_entities_by_domain,
+                    ))
+
+        random.shuffle(examples)
+        return examples
+
     def generate_all(self) -> list[MultiTurnExample]:
         """Génère tous les exemples d'entraînement."""
         print("Génération du dataset multi-turn...")
@@ -1366,7 +1549,13 @@ class DatasetGenerator:
         self.negative_examples = self._generate_negative_examples()
         print(f"Total exemples négatifs: {len(self.negative_examples)}")
 
-        print(f"\nTotal général: {len(all_examples) + len(self.negative_examples)} exemples")
+        # Générer les exemples sans action (requêtes vagues)
+        print("\nGénération des exemples sans action (requêtes vagues)...")
+        self.no_action_examples = self._generate_no_action_examples()
+        print(f"Total exemples sans action: {len(self.no_action_examples)}")
+
+        total = len(all_examples) + len(self.negative_examples) + len(self.no_action_examples)
+        print(f"\nTotal général: {total} exemples")
 
         return all_examples
 
@@ -1383,6 +1572,11 @@ class DatasetGenerator:
         n_neg_val = int(len(self.negative_examples) * val_split)
         neg_val_examples = self.negative_examples[:n_neg_val]
         neg_train_examples = self.negative_examples[n_neg_val:]
+
+        # Split train/val pour les exemples sans action
+        n_noact_val = int(len(self.no_action_examples) * val_split)
+        noact_val_examples = self.no_action_examples[:n_noact_val]
+        noact_train_examples = self.no_action_examples[n_noact_val:]
 
         # Sauvegarder
         train_path = os.path.join(output_dir, "train.jsonl")
@@ -1416,6 +1610,19 @@ class DatasetGenerator:
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
                 train_count += 1
 
+            # Exemples sans action (requêtes vagues → pas de function call)
+            for noact_example in noact_train_examples:
+                # Format simple (sans entités)
+                data = noact_example.to_training_format()
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                train_count += 1
+
+                # Format one-step (avec entités listées mais toujours pas d'action)
+                if include_one_step:
+                    data_one_step = noact_example.to_one_step_format()
+                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
+                    train_count += 1
+
         with open(val_path, "w", encoding="utf-8") as f:
             # Exemples positifs
             for example in val_examples:
@@ -1441,10 +1648,21 @@ class DatasetGenerator:
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
                 val_count += 1
 
+            # Exemples sans action
+            for noact_example in noact_val_examples:
+                data = noact_example.to_training_format()
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+                val_count += 1
+
+                if include_one_step:
+                    data_one_step = noact_example.to_one_step_format()
+                    f.write(json.dumps(data_one_step, ensure_ascii=False) + "\n")
+                    val_count += 1
+
         print(f"Dataset sauvegardé:")
         print(f"  Train: {train_path} ({train_count} exemples)")
         print(f"  Val: {val_path} ({val_count} exemples)")
-        print(f"  (inclut: multi-turn, one-step, single-turn, et négatifs)")
+        print(f"  (inclut: multi-turn, one-step, single-turn, négatifs, et sans-action)")
 
         # Afficher des exemples
         if train_examples:
@@ -1456,6 +1674,11 @@ class DatasetGenerator:
             print(f"\nExemple négatif:")
             sample_neg = neg_train_examples[0].to_training_format()
             print(sample_neg["text"])
+
+        if noact_train_examples:
+            print(f"\nExemple sans action (requête vague):")
+            sample_noact = noact_train_examples[0].to_training_format()
+            print(sample_noact["text"])
 
 
 async def main():
