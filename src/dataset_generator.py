@@ -858,13 +858,14 @@ def format_function_call(func_name: str, params: dict) -> str:
 
 @dataclass
 class MultiTurnExample:
-    """Un exemple d'entraînement multi-turn."""
+    """Un exemple d'entraînement one-step."""
     user_query: str
     domain: str
-    available_entities: list[str]  # Liste des entity_ids disponibles
+    available_entities: list[str]  # Liste des entity_ids du domaine cible
     target_entity: str  # L'entité choisie
     action: str  # ex: "turn_on", "set_temperature"
     action_params: dict  # Paramètres additionnels (brightness, temperature, etc.)
+    all_entities_by_domain: dict = field(default_factory=dict)  # Toutes les entités par domaine
 
     def _format_state_response(self) -> str:
         """Génère une réponse d'état simulée pour l'entraînement."""
@@ -980,17 +981,33 @@ class MultiTurnExample:
 
         return {"text": text}
 
+    def _build_all_entities_context(self) -> str:
+        """Construit le contexte avec TOUTES les entités (comme en production)."""
+        if not self.all_entities_by_domain:
+            # Fallback: utiliser seulement les entités du domaine cible
+            entities_list = ", ".join(self.available_entities)
+            return f"Entités {self.domain} disponibles: {entities_list}"
+
+        # Format identique à chat.py _build_entities_context()
+        parts = []
+        for domain in USEFUL_DOMAINS:
+            entities = self.all_entities_by_domain.get(domain, [])
+            if entities:
+                entities_str = ", ".join(entities)
+                parts.append(f"Entités {domain} disponibles: {entities_str}")
+        return "\n".join(parts) if parts else "Aucune entité disponible"
+
     def to_one_step_format(self) -> dict:
         """
         Convertit en format d'entraînement one-step.
 
         Pattern simplifié:
-        1. User demande une action + liste des entités disponibles
+        1. User demande une action + liste de TOUTES les entités disponibles
         2. Model appelle directement l'action avec la bonne entité
         """
-        # Liste des entités disponibles dans le prompt
-        entities_list = ", ".join(self.available_entities[:10])
-        user_prompt = f"{self.user_query}\n\nEntités {self.domain} disponibles: {entities_list}"
+        # Contexte avec TOUTES les entités (pas juste le domaine cible)
+        entities_context = self._build_all_entities_context()
+        user_prompt = f"{self.user_query}\n\n{entities_context}"
 
         # Appel de l'action directe
         action_params = {"entity_id": self.target_entity}
@@ -1073,6 +1090,13 @@ class DatasetGenerator:
                 if domain not in self.entities_by_domain:
                     self.entities_by_domain[domain] = []
                 self.entities_by_domain[domain].append(entity)
+
+        # Créer un dict domain -> liste d'entity_ids (pour le contexte one-step)
+        self.all_entity_ids_by_domain: dict[str, list[str]] = {}
+        for domain, entities_list in self.entities_by_domain.items():
+            self.all_entity_ids_by_domain[domain] = [
+                e.get("entity_id", "") for e in entities_list
+            ]
 
     def _get_entity_name(self, entity: dict) -> str:
         """Extrait un nom lisible pour une entité."""
@@ -1165,6 +1189,7 @@ class DatasetGenerator:
                         target_entity=entity_id,
                         action=actual_action,
                         action_params=action_params.copy(),
+                        all_entities_by_domain=self.all_entity_ids_by_domain,
                     ))
 
                     # Version avec fautes de frappe (50% du temps)
@@ -1178,6 +1203,7 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=self.all_entity_ids_by_domain,
                             ))
 
                     # Version avec préfixe de politesse (30% du temps)
@@ -1192,6 +1218,7 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=self.all_entity_ids_by_domain,
                             ))
 
                     # Version avec suffixe contextuel (20% du temps)
@@ -1208,6 +1235,7 @@ class DatasetGenerator:
                                 target_entity=entity_id,
                                 action=actual_action,
                                 action_params=action_params.copy(),
+                                all_entities_by_domain=self.all_entity_ids_by_domain,
                             ))
 
         # Générer des exemples de confusion (entités similaires)
@@ -1301,6 +1329,7 @@ class DatasetGenerator:
                     target_entity=e1,  # La première est la cible
                     action=action,
                     action_params=action_params,
+                    all_entities_by_domain=self.all_entity_ids_by_domain,
                 ))
 
         return examples
