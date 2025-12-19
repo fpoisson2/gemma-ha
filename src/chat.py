@@ -215,57 +215,64 @@ class GemmaHAChat:
         entities_str = ", ".join(entities[:10])
         return f"Entités {domain} disponibles: {entities_str}"
 
-    async def get_entity_state(self, entity_id: str) -> str:
+    async def get_all_states(self) -> str:
         """
-        Récupère l'état d'une entité Home Assistant via GET /api/states/{entity_id}.
-        C'est le handler pour le tool MCP ha_get_state.
+        Récupère tous les états Home Assistant via GET /api/states.
+        C'est le handler pour le tool MCP ha.get_states (sans paramètres).
         """
         if not self.ha_client:
-            return f"[Simulation] État de {entity_id}: unknown"
+            return "[Simulation] États non disponibles"
 
         import aiohttp
 
         try:
             async with aiohttp.ClientSession() as session:
-                url = f"{self.ha_client.url}/api/states/{entity_id}"
+                url = f"{self.ha_client.url}/api/states"
                 async with session.get(
                     url,
                     headers=self.ha_client._headers(),
                 ) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
-                        state = data.get("state", "unknown")
-                        attrs = data.get("attributes", {})
+                        all_states = await resp.json()
 
-                        # Formater une réponse lisible selon le domaine
-                        domain = entity_id.split(".")[0] if "." in entity_id else ""
+                        # Formater les états par domaine (limité aux domaines supportés)
+                        supported_domains = ["person", "light", "switch", "climate", "cover", "lock", "fan"]
+                        results = []
 
-                        if domain == "person":
-                            location = attrs.get("friendly_name", entity_id.split(".")[-1])
-                            return f"{location} est {state}"
-                        elif domain == "light":
-                            if state == "on":
-                                brightness = attrs.get("brightness", 255)
-                                pct = int(brightness / 255 * 100)
-                                return f"Lumière allumée ({pct}%)"
-                            else:
-                                return "Lumière éteinte"
-                        elif domain == "climate":
-                            current_temp = attrs.get("current_temperature", "?")
-                            target_temp = attrs.get("temperature", "?")
-                            mode = attrs.get("hvac_mode", state)
-                            return f"Température: {current_temp}°C (cible: {target_temp}°C, mode: {mode})"
-                        elif domain == "cover":
-                            position = attrs.get("current_position", "?")
-                            return f"Volet {state} (position: {position}%)"
-                        elif domain == "lock":
-                            return f"Serrure {state}"
-                        elif domain == "switch":
-                            return f"Interrupteur {state}"
-                        else:
-                            return f"{entity_id}: {state}"
-                    elif resp.status == 404:
-                        return f"Entité {entity_id} non trouvée"
+                        for entity_data in all_states:
+                            entity_id = entity_data.get("entity_id", "")
+                            domain = entity_id.split(".")[0] if "." in entity_id else ""
+
+                            if domain not in supported_domains:
+                                continue
+
+                            state = entity_data.get("state", "unknown")
+                            attrs = entity_data.get("attributes", {})
+                            friendly_name = attrs.get("friendly_name", entity_id.split(".")[-1])
+
+                            if domain == "person":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "light":
+                                if state == "on":
+                                    brightness = attrs.get("brightness", 255)
+                                    pct = int(brightness / 255 * 100)
+                                    results.append(f"{friendly_name}: on ({pct}%)")
+                                else:
+                                    results.append(f"{friendly_name}: off")
+                            elif domain == "climate":
+                                current_temp = attrs.get("current_temperature", "?")
+                                results.append(f"{friendly_name}: {current_temp}°C")
+                            elif domain == "cover":
+                                position = attrs.get("current_position", "?")
+                                results.append(f"{friendly_name}: {state} ({position}%)")
+                            elif domain == "lock":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "switch":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "fan":
+                                results.append(f"{friendly_name}: {state}")
+
+                        return "\n".join(results) if results else "Aucun état disponible"
                     else:
                         text = await resp.text()
                         return f"Erreur {resp.status}: {text}"
@@ -277,12 +284,9 @@ class GemmaHAChat:
         if not self.ha_client:
             return f"[Simulation] {func_name}({params})"
 
-        # Handler spécial pour ha_get_state (tool MCP)
-        if func_name == "ha_get_state":
-            entity_id = params.get("entity_id", "")
-            if not entity_id:
-                return "Erreur: entity_id requis pour ha_get_state"
-            return await self.get_entity_state(entity_id)
+        # Handler spécial pour ha.get_states (tool MCP sans paramètres)
+        if func_name == "ha.get_states":
+            return await self.get_all_states()
 
         # Parser domain.service
         if "." not in func_name:

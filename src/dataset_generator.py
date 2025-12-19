@@ -726,6 +726,36 @@ class MultiTurnExample:
     action: str  # ex: "turn_on", "set_temperature"
     action_params: dict  # Paramètres additionnels (brightness, temperature, etc.)
 
+    def _format_state_response(self) -> str:
+        """Génère une réponse d'état simulée pour l'entraînement."""
+        entity_name = self.target_entity.split(".")[-1].replace("_", " ").title()
+
+        if self.domain == "person":
+            locations = ["home", "away", "work", "not_home"]
+            loc = random.choice(locations)
+            return f"{entity_name}: {loc}"
+        elif self.domain == "light":
+            states = ["on (75%)", "off", "on (100%)", "on (50%)"]
+            return f"{entity_name}: {random.choice(states)}"
+        elif self.domain == "climate":
+            temp = random.randint(18, 24)
+            modes = ["heat", "cool", "auto", "off"]
+            return f"{entity_name}: {temp}°C, mode {random.choice(modes)}"
+        elif self.domain == "cover":
+            positions = ["open (100%)", "closed (0%)", "open (50%)"]
+            return f"{entity_name}: {random.choice(positions)}"
+        elif self.domain == "lock":
+            states = ["locked", "unlocked"]
+            return f"{entity_name}: {random.choice(states)}"
+        elif self.domain == "switch":
+            states = ["on", "off"]
+            return f"{entity_name}: {random.choice(states)}"
+        elif self.domain == "fan":
+            states = ["on", "off"]
+            return f"{entity_name}: {random.choice(states)}"
+        else:
+            return f"{entity_name}: unknown"
+
     def to_training_format(self) -> dict:
         """
         Convertit en format d'entraînement multi-turn.
@@ -750,25 +780,30 @@ class MultiTurnExample:
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
 
-        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        # Pour get_state, utiliser ha.get_states (tool MCP) sans paramètres
         if self.action == "get_state":
-            action_call = format_function_call(
-                "ha_get_state",
-                {"entity_id": self.target_entity}
+            action_call = "<start_function_call>call:ha.get_states{}<end_function_call>"
+            # Simuler la réponse du tool avec les états
+            states_response = self._format_state_response()
+            text = (
+                f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+                f"<start_of_turn>model\n{get_entities_call}<end_of_turn>\n"
+                f"<start_of_turn>tool\n{tool_response}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>\n"
+                f"<start_of_turn>tool\n{states_response}<end_of_turn>"
             )
         else:
             action_call = format_function_call(
                 f"{self.domain}.{self.action}",
                 action_params
             )
-
-        # Format texte pour l'entraînement
-        text = (
-            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
-            f"<start_of_turn>model\n{get_entities_call}<end_of_turn>\n"
-            f"<start_of_turn>tool\n{tool_response}<end_of_turn>\n"
-            f"<start_of_turn>model\n{action_call}<end_of_turn>"
-        )
+            # Format texte pour l'entraînement
+            text = (
+                f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+                f"<start_of_turn>model\n{get_entities_call}<end_of_turn>\n"
+                f"<start_of_turn>tool\n{tool_response}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>"
+            )
 
         return {"text": text}
 
@@ -784,23 +819,24 @@ class MultiTurnExample:
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
 
-        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        # Pour get_state, utiliser ha.get_states (tool MCP) sans paramètres
         if self.action == "get_state":
-            action_call = format_function_call(
-                "ha_get_state",
-                {"entity_id": self.target_entity}
+            action_call = "<start_function_call>call:ha.get_states{}<end_function_call>"
+            states_response = self._format_state_response()
+            text = (
+                f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>\n"
+                f"<start_of_turn>tool\n{states_response}<end_of_turn>"
             )
         else:
             action_call = format_function_call(
                 f"{self.domain}.{self.action}",
                 action_params
             )
-
-        # Format texte pour l'entraînement
-        text = (
-            f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
-            f"<start_of_turn>model\n{action_call}<end_of_turn>"
-        )
+            text = (
+                f"<start_of_turn>user\n{self.user_query}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>"
+            )
 
         return {"text": text}
 
@@ -820,23 +856,24 @@ class MultiTurnExample:
         action_params = {"entity_id": self.target_entity}
         action_params.update(self.action_params)
 
-        # Pour get_state, utiliser ha_get_state (tool MCP) au lieu de domain.get_state
+        # Pour get_state, utiliser ha.get_states (tool MCP) sans paramètres
         if self.action == "get_state":
-            action_call = format_function_call(
-                "ha_get_state",
-                {"entity_id": self.target_entity}
+            action_call = "<start_function_call>call:ha.get_states{}<end_function_call>"
+            states_response = self._format_state_response()
+            text = (
+                f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>\n"
+                f"<start_of_turn>tool\n{states_response}<end_of_turn>"
             )
         else:
             action_call = format_function_call(
                 f"{self.domain}.{self.action}",
                 action_params
             )
-
-        # Format texte pour l'entraînement
-        text = (
-            f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
-            f"<start_of_turn>model\n{action_call}<end_of_turn>"
-        )
+            text = (
+                f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n"
+                f"<start_of_turn>model\n{action_call}<end_of_turn>"
+            )
 
         return {"text": text}
 
