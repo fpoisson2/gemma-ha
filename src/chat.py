@@ -215,10 +215,78 @@ class GemmaHAChat:
         entities_str = ", ".join(entities[:10])
         return f"Entités {domain} disponibles: {entities_str}"
 
+    async def get_all_states(self) -> str:
+        """
+        Récupère tous les états Home Assistant via GET /api/states.
+        C'est le handler pour le tool MCP ha.get_states (sans paramètres).
+        """
+        if not self.ha_client:
+            return "[Simulation] États non disponibles"
+
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.ha_client.url}/api/states"
+                async with session.get(
+                    url,
+                    headers=self.ha_client._headers(),
+                ) as resp:
+                    if resp.status == 200:
+                        all_states = await resp.json()
+
+                        # Formater les états par domaine (limité aux domaines supportés)
+                        supported_domains = ["person", "light", "switch", "climate", "cover", "lock", "fan"]
+                        results = []
+
+                        for entity_data in all_states:
+                            entity_id = entity_data.get("entity_id", "")
+                            domain = entity_id.split(".")[0] if "." in entity_id else ""
+
+                            if domain not in supported_domains:
+                                continue
+
+                            state = entity_data.get("state", "unknown")
+                            attrs = entity_data.get("attributes", {})
+                            friendly_name = attrs.get("friendly_name", entity_id.split(".")[-1])
+
+                            if domain == "person":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "light":
+                                if state == "on":
+                                    brightness = attrs.get("brightness", 255)
+                                    pct = int(brightness / 255 * 100)
+                                    results.append(f"{friendly_name}: on ({pct}%)")
+                                else:
+                                    results.append(f"{friendly_name}: off")
+                            elif domain == "climate":
+                                current_temp = attrs.get("current_temperature", "?")
+                                results.append(f"{friendly_name}: {current_temp}°C")
+                            elif domain == "cover":
+                                position = attrs.get("current_position", "?")
+                                results.append(f"{friendly_name}: {state} ({position}%)")
+                            elif domain == "lock":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "switch":
+                                results.append(f"{friendly_name}: {state}")
+                            elif domain == "fan":
+                                results.append(f"{friendly_name}: {state}")
+
+                        return "\n".join(results) if results else "Aucun état disponible"
+                    else:
+                        text = await resp.text()
+                        return f"Erreur {resp.status}: {text}"
+        except Exception as e:
+            return f"Erreur: {e}"
+
     async def call_ha_service(self, func_name: str, params: dict) -> str:
         """Appelle un service Home Assistant."""
         if not self.ha_client:
             return f"[Simulation] {func_name}({params})"
+
+        # Handler spécial pour ha.get_states (tool MCP sans paramètres)
+        if func_name == "ha.get_states":
+            return await self.get_all_states()
 
         # Parser domain.service
         if "." not in func_name:
